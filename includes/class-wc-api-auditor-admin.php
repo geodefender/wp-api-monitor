@@ -116,6 +116,33 @@ class WC_API_Auditor_Admin {
                                 <td colspan="7">
                                     <strong><?php esc_html_e( 'Request', 'wc-api-auditor' ); ?>:</strong>
                                     <pre><?php echo esc_html( $log->request_payload ); ?></pre>
+                                    <?php
+                                    $raw_body            = '';
+                                    $raw_body_truncated  = false;
+                                    $decoded_payload     = json_decode( $log->request_payload, true );
+
+                                    if ( is_array( $decoded_payload ) ) {
+                                        if ( isset( $decoded_payload['raw_body'] ) ) {
+                                            $raw_body = $decoded_payload['raw_body'];
+                                        }
+
+                                        if ( ! empty( $decoded_payload['raw_body_truncated'] ) ) {
+                                            $raw_body_truncated = (bool) $decoded_payload['raw_body_truncated'];
+                                        }
+                                    }
+
+                                    if ( isset( $log->raw_body ) && '' !== $log->raw_body ) {
+                                        $raw_body = $log->raw_body;
+                                    }
+
+                                    if ( '' !== $raw_body ) :
+                                    ?>
+                                        <strong><?php esc_html_e( 'Raw body', 'wc-api-auditor' ); ?>:</strong>
+                                        <pre><?php echo esc_html( $raw_body ); ?></pre>
+                                        <?php if ( $raw_body_truncated ) : ?>
+                                            <em><?php esc_html_e( 'El cuerpo fue truncado para cumplir con el límite de almacenamiento.', 'wc-api-auditor' ); ?></em>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                     <strong><?php esc_html_e( 'Response', 'wc-api-auditor' ); ?>:</strong>
                                     <pre><?php echo esc_html( $log->response_body ); ?></pre>
                                 </td>
