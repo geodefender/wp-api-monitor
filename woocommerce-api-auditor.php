@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce API Auditor
  * Description: Registra y muestra todas las solicitudes realizadas a la API REST de WooCommerce.
  * Version: 1.0.0
- * Author: OpenAI
+ * Author: inmensus.ai
  * Text Domain: wc-api-auditor
  * Domain Path: /languages
  */
