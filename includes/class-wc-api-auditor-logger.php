@@ -288,8 +288,13 @@ class WC_API_Auditor_Logger {
      */
     private function get_endpoint_path( $request ) {
         $route = $request->get_route();
+        $endpoint = trailingslashit( $route );
 
-        return trailingslashit( $route );
+        if ( ! empty( $_SERVER['QUERY_STRING'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+            $endpoint = $endpoint . '?' . wp_unslash( $_SERVER['QUERY_STRING'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        }
+
+        return $endpoint;
     }
 
     /**
