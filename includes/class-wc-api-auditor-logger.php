@@ -221,9 +221,27 @@ class WC_API_Auditor_Logger {
             $body_params = $json_params;
         }
 
+        $sensitive_headers = array(
+            'authorization',
+            'proxy-authorization',
+            'cookie',
+            'set-cookie',
+            'x-api-key',
+            'x-woocommerce-signature',
+            'x-wc-webhook-signature',
+            'php-auth-pw',
+        );
+
         $safe_headers = array();
         foreach ( $headers as $key => $value ) {
-            $safe_headers[ sanitize_key( $key ) ] = array_map( 'sanitize_text_field', (array) $value );
+            $normalized_key = sanitize_key( $key );
+
+            if ( in_array( $normalized_key, $sensitive_headers, true ) ) {
+                $safe_headers[ $normalized_key ] = array( '[redacted]' );
+                continue;
+            }
+
+            $safe_headers[ $normalized_key ] = array_map( 'sanitize_text_field', (array) $value );
         }
 
         return array(
