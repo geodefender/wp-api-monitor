@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WC_API_Auditor_Logger {
 
     const RAW_BODY_MAX_LENGTH = 10000;
+    const DEFAULT_STORAGE_LIMIT = 51200; // 50 KB.
 
     /**
      * Singleton instance.
@@ -210,6 +211,11 @@ class WC_API_Auditor_Logger {
 
         $table_name = $wpdb->prefix . 'wc_api_audit_log';
 
+        $storage_limit = $this->get_storage_limit();
+
+        $request_payload = $this->prepare_content_for_storage( $payload['request_payload'], $storage_limit );
+        $response_body   = $this->prepare_content_for_storage( $response_body, $storage_limit );
+
         $wpdb->insert(
             $table_name,
             array(
@@ -220,7 +226,7 @@ class WC_API_Auditor_Logger {
                 'endpoint'        => $payload['endpoint'],
                 'api_key_id'      => $payload['api_key_id'],
                 'api_key_display' => $payload['api_key_display'],
-                'request_payload' => $payload['request_payload'],
+                'request_payload' => $request_payload,
                 'raw_body'        => isset( $payload['raw_body'] ) ? $payload['raw_body'] : '',
                 'response_code'   => absint( $response_code ),
                 'response_body'   => $response_body,
@@ -397,6 +403,69 @@ class WC_API_Auditor_Logger {
     }
 
     /**
+     * Prepare large contents for storage, truncating and annotating when needed.
+     *
+     * @param mixed $content Original content.
+     * @param int   $limit   Maximum characters to store.
+     *
+     * @return string
+     */
+    private function prepare_content_for_storage( $content, $limit ) {
+        if ( ! is_string( $content ) ) {
+            $content = wp_json_encode( $content );
+        }
+
+        if ( null === $content ) {
+            $content = '';
+        }
+
+        $length = $this->get_string_length( $content );
+
+        if ( $length <= $limit ) {
+            return $content;
+        }
+
+        $hash          = hash( 'sha256', $content );
+        $truncated     = $this->truncate_string( $content, $limit );
+        $marker        = '[TRUNCADO]';
+        $annotation    = sprintf(
+            '\n\n%s Hash SHA256: %s. Longitud original: %d caracteres.',
+            $marker,
+            $hash,
+            $length
+        );
+
+        return $truncated . $annotation;
+    }
+
+    /**
+     * Get multibyte-safe string length.
+     *
+     * @param string $string String to measure.
+     *
+     * @return int
+     */
+    private function get_string_length( $string ) {
+        return function_exists( 'mb_strlen' ) ? mb_strlen( $string ) : strlen( $string );
+    }
+
+    /**
+     * Truncate a string safely.
+     *
+     * @param string $string String to truncate.
+     * @param int    $limit  Maximum length.
+     *
+     * @return string
+     */
+    private function truncate_string( $string, $limit ) {
+        if ( function_exists( 'mb_substr' ) ) {
+            return mb_substr( $string, 0, $limit );
+        }
+
+        return substr( $string, 0, $limit );
+    }
+
+    /**
      * Detect API key ID from request.
      *
      * @return int|null
@@ -562,6 +631,17 @@ class WC_API_Auditor_Logger {
     }
 
     /**
+     * Get maximum storage length for payloads and responses.
+     *
+     * @return int
+     */
+    private function get_storage_limit() {
+        $settings = $this->get_settings();
+
+        return isset( $settings['payload_max_length'] ) ? absint( $settings['payload_max_length'] ) : self::DEFAULT_STORAGE_LIMIT;
+    }
+
+    /**
      * Get logger settings.
      *
      * @return array
@@ -578,8 +658,12 @@ class WC_API_Auditor_Logger {
             $stored = array();
         }
 
-        $stored['capture_extended'] = ! empty( $stored['capture_extended'] );
-        $stored['extra_namespaces'] = $this->sanitize_namespaces_list( isset( $stored['extra_namespaces'] ) ? $stored['extra_namespaces'] : array() );
+        $stored['capture_extended']   = ! empty( $stored['capture_extended'] );
+        $stored['extra_namespaces']   = $this->sanitize_namespaces_list( isset( $stored['extra_namespaces'] ) ? $stored['extra_namespaces'] : array() );
+        $stored['payload_max_length'] = isset( $stored['payload_max_length'] ) ? absint( $stored['payload_max_length'] ) : self::DEFAULT_STORAGE_LIMIT;
+        if ( $stored['payload_max_length'] <= 0 ) {
+            $stored['payload_max_length'] = self::DEFAULT_STORAGE_LIMIT;
+        }
 
         $this->settings = wp_parse_args( $stored, $defaults );
 
@@ -600,8 +684,9 @@ class WC_API_Auditor_Logger {
      */
     public static function get_default_settings() {
         return array(
-            'capture_extended' => false,
-            'extra_namespaces' => array(),
+            'capture_extended'   => false,
+            'extra_namespaces'   => array(),
+            'payload_max_length' => self::DEFAULT_STORAGE_LIMIT,
         );
     }
 

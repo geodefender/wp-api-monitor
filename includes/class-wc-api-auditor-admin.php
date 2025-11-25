@@ -226,6 +226,12 @@ class WC_API_Auditor_Admin {
                 <input type="text" name="extra_namespaces" value="<?php echo esc_attr( implode( ', ', $settings['extra_namespaces'] ) ); ?>" class="regular-text" />
             </label>
             <p class="description"><?php esc_html_e( 'Utiliza este ajuste si necesitas auditar otros endpoints (por ejemplo, /wp/v2/). Considera el impacto en el tamaño de la base de datos.', 'wc-api-auditor' ); ?></p>
+            <?php $payload_limit_kb = max( 1, intval( ceil( $settings['payload_max_length'] / 1024 ) ) ); ?>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Límite de almacenamiento para cuerpos (KB)', 'wc-api-auditor' ); ?>
+                <input type="number" min="1" name="payload_max_length" value="<?php echo esc_attr( $payload_limit_kb ); ?>" class="small-text" />
+            </label>
+            <p class="description"><?php esc_html_e( 'Los cuerpos de petición y respuesta que superen este límite se truncarán y se marcarán como [TRUNCADO], guardando un hash del contenido completo para trazabilidad. Valor por defecto: 50 KB.', 'wc-api-auditor' ); ?></p>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
@@ -273,11 +279,13 @@ class WC_API_Auditor_Admin {
 
         $capture_extended = isset( $_POST['capture_extended'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
             'capture_extended' => (bool) $capture_extended,
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
+            'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
         );
 
         update_option( 'wc_api_auditor_settings', $settings );
