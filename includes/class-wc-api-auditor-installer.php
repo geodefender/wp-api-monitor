@@ -37,10 +37,27 @@ class WC_API_Auditor_Installer {
             response_body longtext NULL,
             PRIMARY KEY  (id),
             KEY api_key_id (api_key_id),
+            KEY http_method (http_method),
+            KEY endpoint (endpoint(191)),
+            KEY api_key_display (api_key_display),
+            KEY idx_timestamp_method_display (timestamp DESC, http_method, api_key_display),
             KEY timestamp (timestamp)
         ) {$charset_collate};";
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         dbDelta( $sql );
+
+        update_option( 'wc_api_auditor_db_version', WC_API_AUDITOR_DB_VERSION );
+    }
+
+    /**
+     * Update the audit log table when schema changes.
+     */
+    public static function maybe_update() {
+        $installed_version = get_option( 'wc_api_auditor_db_version' );
+
+        if ( version_compare( $installed_version, WC_API_AUDITOR_DB_VERSION, '<' ) ) {
+            self::install();
+        }
     }
 }
