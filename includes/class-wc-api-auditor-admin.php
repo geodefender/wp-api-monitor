@@ -63,6 +63,9 @@ class WC_API_Auditor_Admin {
             wp_die( esc_html__( 'You do not have permission to access this page.', 'wc-api-auditor' ) );
         }
 
+        $this->handle_settings_form();
+
+        $settings = $this->get_settings();
         $filters = $this->get_filters();
         $logs    = $this->get_logs( $filters );
         $total   = $this->count_logs( $filters );
@@ -73,6 +76,8 @@ class WC_API_Auditor_Admin {
         ?>
         <div class="wrap">
             <h1><?php echo esc_html__( 'WooCommerce API Auditor', 'wc-api-auditor' ); ?></h1>
+            <?php settings_errors( 'wc_api_auditor_settings' ); ?>
+            <?php $this->render_settings_form( $settings ); ?>
             <?php $this->render_filters( $filters ); ?>
             <p><?php printf( esc_html__( 'Mostrando %1$d de %2$d registros.', 'wc-api-auditor' ), count( $logs ), intval( $total ) ); ?></p>
             <table class="widefat fixed striped">
@@ -175,6 +180,31 @@ class WC_API_Auditor_Admin {
     }
 
     /**
+     * Render settings form.
+     *
+     * @param array $settings Current settings.
+     */
+    private function render_settings_form( $settings ) {
+        ?>
+        <form method="post" style="margin-bottom: 20px;" action="<?php echo esc_url( admin_url( 'admin.php?page=wc-api-auditor' ) ); ?>">
+            <?php wp_nonce_field( 'wc_api_auditor_settings_action', 'wc_api_auditor_settings_nonce' ); ?>
+            <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
+            <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" name="capture_extended" value="1" <?php checked( $settings['capture_extended'], true ); ?> />
+                <?php esc_html_e( 'Activar captura ampliada', 'wc-api-auditor' ); ?>
+            </label>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Namespaces adicionales (separados por coma)', 'wc-api-auditor' ); ?>
+                <input type="text" name="extra_namespaces" value="<?php echo esc_attr( implode( ', ', $settings['extra_namespaces'] ) ); ?>" class="regular-text" />
+            </label>
+            <p class="description"><?php esc_html_e( 'Utiliza este ajuste si necesitas auditar otros endpoints (por ejemplo, /wp/v2/). Considera el impacto en el tamaño de la base de datos.', 'wc-api-auditor' ); ?></p>
+            <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
+        </form>
+        <?php
+    }
+
+    /**
      * Build query filters from request.
      *
      * @return array
@@ -196,6 +226,46 @@ class WC_API_Auditor_Admin {
             'paged'    => $paged,
             'per_page' => 20,
         );
+    }
+
+    /**
+     * Handle settings form submission.
+     */
+    private function handle_settings_form() {
+        if ( ! isset( $_POST['wc_api_auditor_settings_nonce'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return;
+        }
+
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wc_api_auditor_settings_nonce'] ) ), 'wc_api_auditor_settings_action' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return;
+        }
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            return;
+        }
+
+        $capture_extended = isset( $_POST['capture_extended'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+        $logger    = WC_API_Auditor_Logger::get_instance();
+        $settings  = array(
+            'capture_extended' => (bool) $capture_extended,
+            'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
+        );
+
+        update_option( 'wc_api_auditor_settings', $settings );
+        $logger->refresh_settings();
+
+        add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_settings_saved', esc_html__( 'Ajustes guardados correctamente.', 'wc-api-auditor' ), 'updated' );
+    }
+
+    /**
+     * Retrieve saved settings.
+     *
+     * @return array
+     */
+    private function get_settings() {
+        return WC_API_Auditor_Logger::get_instance()->get_settings();
     }
 
     /**

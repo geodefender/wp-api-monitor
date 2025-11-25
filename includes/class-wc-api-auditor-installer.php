@@ -48,6 +48,10 @@ class WC_API_Auditor_Installer {
         dbDelta( $sql );
 
         update_option( 'wc_api_auditor_db_version', WC_API_AUDITOR_DB_VERSION );
+
+        if ( ! get_option( 'wc_api_auditor_settings' ) ) {
+            update_option( 'wc_api_auditor_settings', WC_API_Auditor_Logger::get_default_settings() );
+        }
     }
 
     /**

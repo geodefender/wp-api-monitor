@@ -29,6 +29,20 @@ class WC_API_Auditor_Logger {
     private $requests = array();
 
     /**
+     * Track completed requests to avoid duplicate entries.
+     *
+     * @var array
+     */
+    private $completed_requests = array();
+
+    /**
+     * Cached settings.
+     *
+     * @var array
+     */
+    private $settings = null;
+
+    /**
      * Get singleton instance.
      *
      * @return WC_API_Auditor_Logger
@@ -47,6 +61,7 @@ class WC_API_Auditor_Logger {
     public function init() {
         add_filter( 'rest_request_before_callbacks', array( $this, 'capture_request' ), 5, 3 );
         add_filter( 'rest_request_after_callbacks', array( $this, 'capture_response' ), 20, 3 );
+        add_filter( 'rest_post_dispatch', array( $this, 'capture_post_dispatch' ), 20, 3 );
         add_action( 'woocommerce_api_request', array( $this, 'capture_legacy_request' ), 10, 2 );
     }
 
@@ -89,16 +104,7 @@ class WC_API_Auditor_Logger {
 
         $request_key = spl_object_hash( $request );
 
-        $this->requests[ $request_key ] = array(
-            'timestamp'      => current_time( 'mysql' ),
-            'http_method'    => $request->get_method(),
-            'endpoint'       => $this->get_endpoint_path( $request ),
-            'request_payload'=> wp_json_encode( $this->get_request_payload( $request ) ),
-            'api_key_id'     => $this->detect_api_key_id(),
-            'api_key_display'=> $this->detect_api_key_display(),
-            'ip_address'     => $this->get_client_ip(),
-            'user_agent'     => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
-        );
+        $this->requests[ $request_key ] = $this->build_payload( $request );
 
         return $result;
     }
@@ -136,7 +142,56 @@ class WC_API_Auditor_Logger {
 
         $payload = $this->requests[ $request_key ];
         $this->insert_log( $payload, $status, $body );
+        $this->completed_requests[ $request_key ] = true;
         unset( $this->requests[ $request_key ] );
+
+        return $response;
+    }
+
+    /**
+     * Capture responses generated before callbacks are executed.
+     *
+     * @param WP_REST_Response|mixed $response Response.
+     * @param WP_REST_Server         $server   Server instance.
+     * @param WP_REST_Request        $request  Request.
+     *
+     * @return mixed
+     */
+    public function capture_post_dispatch( $response, $server, $request ) {
+        if ( ! $this->is_extended_capture_enabled() ) {
+            return $response;
+        }
+
+        if ( ! $request instanceof WP_REST_Request ) {
+            return $response;
+        }
+
+        if ( ! $this->is_woocommerce_request( $request ) ) {
+            return $response;
+        }
+
+        $request_key = spl_object_hash( $request );
+
+        if ( isset( $this->completed_requests[ $request_key ] ) ) {
+            return $response;
+        }
+
+        $payload = isset( $this->requests[ $request_key ] ) ? $this->requests[ $request_key ] : $this->build_payload( $request );
+
+        $status      = 0;
+        $body        = null;
+        $rest_output = rest_ensure_response( $response );
+
+        if ( $rest_output instanceof WP_REST_Response ) {
+            $status = $rest_output->get_status();
+            $body   = wp_json_encode( $rest_output->get_data() );
+        } else {
+            $status = 500;
+            $body   = wp_json_encode( $rest_output );
+        }
+
+        $this->insert_log( $payload, $status, $body );
+        $this->completed_requests[ $request_key ] = true;
 
         return $response;
     }
@@ -180,8 +235,48 @@ class WC_API_Auditor_Logger {
      */
     private function is_woocommerce_request( $request ) {
         $route = $request->get_route();
+        $settings = $this->get_settings();
 
-        return ( 0 === strpos( $route, '/wc/' ) );
+        $namespaces = array( '/wc/' );
+
+        if ( ! empty( $settings['capture_extended'] ) && ! empty( $settings['extra_namespaces'] ) ) {
+            foreach ( $settings['extra_namespaces'] as $namespace ) {
+                $normalized = '/' . ltrim( $namespace, '/' );
+                if ( '/' === $normalized ) {
+                    continue;
+                }
+
+                $namespaces[] = untrailingslashit( $normalized ) . '/';
+            }
+        }
+
+        foreach ( $namespaces as $namespace ) {
+            if ( 0 === strpos( trailingslashit( $route ), $namespace ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Build base payload for a request.
+     *
+     * @param WP_REST_Request $request Request.
+     *
+     * @return array
+     */
+    private function build_payload( $request ) {
+        return array(
+            'timestamp'       => current_time( 'mysql' ),
+            'http_method'     => $request->get_method(),
+            'endpoint'        => $this->get_endpoint_path( $request ),
+            'request_payload' => wp_json_encode( $this->get_request_payload( $request ) ),
+            'api_key_id'      => $this->detect_api_key_id(),
+            'api_key_display' => $this->detect_api_key_display(),
+            'ip_address'      => $this->get_client_ip(),
+            'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+        );
     }
 
     /**
@@ -382,5 +477,91 @@ class WC_API_Auditor_Logger {
         }
 
         return $value;
+    }
+
+    /**
+     * Get logger settings.
+     *
+     * @return array
+     */
+    public function get_settings() {
+        if ( null !== $this->settings ) {
+            return $this->settings;
+        }
+
+        $defaults = self::get_default_settings();
+        $stored   = get_option( 'wc_api_auditor_settings', array() );
+
+        if ( ! is_array( $stored ) ) {
+            $stored = array();
+        }
+
+        $stored['capture_extended'] = ! empty( $stored['capture_extended'] );
+        $stored['extra_namespaces'] = $this->sanitize_namespaces_list( isset( $stored['extra_namespaces'] ) ? $stored['extra_namespaces'] : array() );
+
+        $this->settings = wp_parse_args( $stored, $defaults );
+
+        return $this->settings;
+    }
+
+    /**
+     * Clear cached settings.
+     */
+    public function refresh_settings() {
+        $this->settings = null;
+    }
+
+    /**
+     * Default settings for the logger.
+     *
+     * @return array
+     */
+    public static function get_default_settings() {
+        return array(
+            'capture_extended' => false,
+            'extra_namespaces' => array(),
+        );
+    }
+
+    /**
+     * Normalize namespaces input.
+     *
+     * @param array|string $namespaces Namespaces input.
+     *
+     * @return array
+     */
+    public function sanitize_namespaces_list( $namespaces ) {
+        if ( is_string( $namespaces ) ) {
+            $namespaces = explode( ',', $namespaces );
+        }
+
+        if ( ! is_array( $namespaces ) ) {
+            return array();
+        }
+
+        $clean = array();
+
+        foreach ( $namespaces as $namespace ) {
+            $namespace = sanitize_text_field( wp_strip_all_tags( $namespace ) );
+
+            if ( '' === $namespace ) {
+                continue;
+            }
+
+            $clean[] = untrailingslashit( '/' . ltrim( $namespace, '/' ) );
+        }
+
+        return array_values( array_unique( $clean ) );
+    }
+
+    /**
+     * Check if extended capture is enabled.
+     *
+     * @return bool
+     */
+    private function is_extended_capture_enabled() {
+        $settings = $this->get_settings();
+
+        return ! empty( $settings['capture_extended'] );
     }
 }
