@@ -33,6 +33,7 @@ class WC_API_Auditor_Installer {
             api_key_id bigint(20) NULL,
             api_key_display varchar(191) NULL,
             request_payload longtext NULL,
+            raw_body longtext NULL,
             response_code int(11) NULL,
             response_body longtext NULL,
             PRIMARY KEY  (id),

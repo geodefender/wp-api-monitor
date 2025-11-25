@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class WC_API_Auditor_Logger {
 
+    const RAW_BODY_MAX_LENGTH = 10000;
+
     /**
      * Singleton instance.
      *
@@ -219,10 +221,11 @@ class WC_API_Auditor_Logger {
                 'api_key_id'      => $payload['api_key_id'],
                 'api_key_display' => $payload['api_key_display'],
                 'request_payload' => $payload['request_payload'],
+                'raw_body'        => isset( $payload['raw_body'] ) ? $payload['raw_body'] : '',
                 'response_code'   => absint( $response_code ),
                 'response_body'   => $response_body,
             ),
-            array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%s' )
+            array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%s' )
         );
     }
 
@@ -310,12 +313,15 @@ class WC_API_Auditor_Logger {
                 'params' => array(),
                 'body'   => '',
                 'headers'=> array(),
+                'raw_body' => '',
+                'raw_body_truncated' => false,
             );
         }
 
         $body_params = $request->get_body_params();
         $json_params = $request->get_json_params();
         $headers     = $request->get_headers();
+        $raw_body    = $this->prepare_raw_body( $request->get_body() );
 
         if ( ! empty( $json_params ) ) {
             $body_params = $json_params;
@@ -348,6 +354,45 @@ class WC_API_Auditor_Logger {
             'params'  => $this->sanitize_recursive( $request->get_params() ),
             'body'    => $this->sanitize_recursive( $body_params ),
             'headers' => $safe_headers,
+            'raw_body' => $raw_body['content'],
+            'raw_body_truncated' => $raw_body['truncated'],
+        );
+    }
+
+    /**
+     * Prepare raw request body for storage.
+     *
+     * @param mixed $raw_body Raw body content.
+     *
+     * @return array
+     */
+    private function prepare_raw_body( $raw_body ) {
+        $content   = '';
+        $truncated = false;
+
+        if ( ! is_string( $raw_body ) ) {
+            return array(
+                'content'   => $content,
+                'truncated' => $truncated,
+            );
+        }
+
+        $sanitized = wp_check_invalid_utf8( $raw_body );
+        if ( null === $sanitized ) {
+            $sanitized = '';
+        }
+
+        $max_length = $this->get_raw_body_max_length();
+        $length     = function_exists( 'mb_strlen' ) ? mb_strlen( $sanitized ) : strlen( $sanitized );
+
+        if ( $length > $max_length ) {
+            $truncated = true;
+            $sanitized = function_exists( 'mb_substr' ) ? mb_substr( $sanitized, 0, $max_length ) : substr( $sanitized, 0, $max_length );
+        }
+
+        return array(
+            'content'   => $sanitized,
+            'truncated' => $truncated,
         );
     }
 
@@ -482,6 +527,15 @@ class WC_API_Auditor_Logger {
         }
 
         return $value;
+    }
+
+    /**
+     * Get the maximum raw body length before truncating.
+     *
+     * @return int
+     */
+    private function get_raw_body_max_length() {
+        return self::RAW_BODY_MAX_LENGTH;
     }
 
     /**
