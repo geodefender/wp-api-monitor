@@ -84,7 +84,7 @@ class WC_API_Auditor_Logger {
             'api_key_id'     => $this->detect_api_key_id(),
             'api_key_display'=> $this->detect_api_key_display(),
             'ip_address'     => $this->get_client_ip(),
-            'user_agent'     => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+            'user_agent'     => $this->get_user_agent(),
         );
 
         $this->insert_log( $this->requests[ $request_key ], 200, wp_json_encode( array( 'api' => $api ) ) );
@@ -278,7 +278,7 @@ class WC_API_Auditor_Logger {
             'api_key_id'      => $this->detect_api_key_id(),
             'api_key_display' => $this->detect_api_key_display(),
             'ip_address'      => $this->get_client_ip(),
-            'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+            'user_agent'      => $this->get_user_agent( $request ),
         );
     }
 
@@ -505,6 +505,29 @@ class WC_API_Auditor_Logger {
 
                 return sanitize_text_field( $ip );
             }
+        }
+
+        return '';
+    }
+
+    /**
+     * Retrieve the request user agent, preferring REST headers.
+     *
+     * @param WP_REST_Request|null $request Request object.
+     *
+     * @return string
+     */
+    private function get_user_agent( $request = null ) {
+        if ( $request instanceof WP_REST_Request ) {
+            $headers = $request->get_headers();
+
+            if ( isset( $headers['user-agent'][0] ) ) {
+                return sanitize_text_field( wp_unslash( $headers['user-agent'][0] ) );
+            }
+        }
+
+        if ( isset( $_SERVER['HTTP_USER_AGENT'] ) ) {
+            return sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) );
         }
 
         return '';
