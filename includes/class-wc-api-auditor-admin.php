@@ -115,7 +115,7 @@ class WC_API_Auditor_Admin {
                             <tr id="wc-api-auditor-detail-<?php echo esc_attr( $log->id ); ?>" style="display:none;">
                                 <td colspan="7">
                                     <strong><?php esc_html_e( 'Request', 'wc-api-auditor' ); ?>:</strong>
-                                    <pre><?php echo esc_html( $log->request_payload ); ?></pre>
+                                    <?php $this->render_json_pretty( 'Request', $log->request_payload ); ?>
                                     <?php
                                     $raw_body            = '';
                                     $raw_body_truncated  = false;
@@ -138,13 +138,13 @@ class WC_API_Auditor_Admin {
                                     if ( '' !== $raw_body ) :
                                     ?>
                                         <strong><?php esc_html_e( 'Raw body', 'wc-api-auditor' ); ?>:</strong>
-                                        <pre><?php echo esc_html( $raw_body ); ?></pre>
+                                        <?php $this->render_json_pretty( 'Raw body', $raw_body ); ?>
                                         <?php if ( $raw_body_truncated ) : ?>
                                             <em><?php esc_html_e( 'El cuerpo fue truncado para cumplir con el límite de almacenamiento.', 'wc-api-auditor' ); ?></em>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     <strong><?php esc_html_e( 'Response', 'wc-api-auditor' ); ?>:</strong>
-                                    <pre><?php echo esc_html( $log->response_body ); ?></pre>
+                                    <?php $this->render_json_pretty( 'Response', $log->response_body ); ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -163,7 +163,64 @@ class WC_API_Auditor_Admin {
                 }
             }
         </script>
+        <style type="text/css">
+            .wc-api-auditor-json {
+                background: #f7f7f7;
+                border: 1px solid #ddd;
+                padding: 10px;
+                border-radius: 4px;
+                font-family: monospace;
+                max-height: 400px;
+                overflow: auto;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+
+            .wc-api-auditor-json pre {
+                margin: 0;
+            }
+
+            .wc-api-auditor-warning {
+                color: #d63638;
+                margin-bottom: 8px;
+                font-weight: 700;
+            }
+        </style>
         <?php
+    }
+
+    /**
+     * Render pretty JSON (or raw content) with optional truncation warning.
+     *
+     * @param string $label     Label to display in warning messages.
+     * @param string $raw_value Raw value to render.
+     */
+    private function render_json_pretty( $label, $raw_value ) {
+        $contains_truncation = ( false !== strpos( $raw_value, '[TRUNCADO]' ) );
+        $decoded_value       = json_decode( $raw_value, true );
+        $is_json             = ( JSON_ERROR_NONE === json_last_error() );
+
+        echo '<div class="wc-api-auditor-json">';
+
+        if ( $contains_truncation ) {
+            printf(
+                '<div class="wc-api-auditor-warning">%s</div>',
+                sprintf(
+                    /* translators: %s: payload label. */
+                    esc_html__( '%s contiene datos truncados.', 'wc-api-auditor' ),
+                    esc_html( $label )
+                )
+            );
+        }
+
+        if ( $is_json ) {
+            $pretty_json = json_encode( $decoded_value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+            echo '<pre>' . esc_html( $pretty_json ) . '</pre>';
+        } else {
+            echo '<pre>' . esc_html( $raw_value ) . '</pre>';
+        }
+
+        echo '</div>';
     }
 
     /**
