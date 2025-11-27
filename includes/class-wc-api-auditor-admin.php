@@ -444,6 +444,17 @@ class WC_API_Auditor_Admin {
                 <textarea name="blocked_endpoints" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
             </label>
             <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
+            <h2><?php esc_html_e( 'Retención y limpieza automática', 'wc-api-auditor' ); ?></h2>
+            <p><?php esc_html_e( 'Configura cuántos días conservar los registros o establece un límite máximo de filas. La limpieza se ejecuta de forma automática mediante WP-Cron (dos veces al día) usando el índice por fecha para minimizar el impacto.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Días de retención (0 para desactivar)', 'wc-api-auditor' ); ?>
+                <input type="number" min="0" name="retention_days" value="<?php echo esc_attr( $settings['retention_days'] ); ?>" class="small-text" />
+            </label>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Límite máximo de registros (0 para desactivar)', 'wc-api-auditor' ); ?>
+                <input type="number" min="0" name="retention_max_records" value="<?php echo esc_attr( $settings['retention_max_records'] ); ?>" class="small-text" />
+            </label>
+            <?php $this->render_cleanup_status(); ?>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
@@ -473,6 +484,37 @@ class WC_API_Auditor_Admin {
             echo '</ul>';
         } else {
             echo '<p><em>' . esc_html__( 'No se han registrado coincidencias aún, pero las rutas configuradas se eliminarán del índice REST si coinciden.', 'wc-api-auditor' ) . '</em></p>';
+        }
+
+        echo '</div>';
+    }
+
+    /**
+     * Show last cleanup run info.
+     */
+    private function render_cleanup_status() {
+        $status = get_option( 'wc_api_auditor_cleanup_status', array() );
+
+        $last_run = isset( $status['last_run'] ) ? $status['last_run'] : __( 'Aún no se ha ejecutado.', 'wc-api-auditor' );
+        $deleted  = isset( $status['deleted'] ) ? intval( $status['deleted'] ) : 0;
+        $errors   = isset( $status['errors'] ) ? (array) $status['errors'] : array();
+
+        echo '<div class="notice notice-info" style="padding: 15px;">';
+        echo '<p><strong>' . esc_html__( 'Limpieza automática', 'wc-api-auditor' ) . '</strong></p>';
+        echo '<p>' . sprintf( esc_html__( 'Última ejecución: %s.', 'wc-api-auditor' ), esc_html( $last_run ) ) . '</p>';
+        echo '<p>' . sprintf( esc_html__( 'Registros eliminados en el último ciclo: %d.', 'wc-api-auditor' ), intval( $deleted ) ) . '</p>';
+
+        $days        = isset( $status['policy']['retention_days'] ) ? intval( $status['policy']['retention_days'] ) : 0;
+        $max_records = isset( $status['policy']['retention_max_records'] ) ? intval( $status['policy']['retention_max_records'] ) : 0;
+
+        if ( 0 === $days && 0 === $max_records ) {
+            echo '<p><em>' . esc_html__( 'La retención está desactivada. Define días o un máximo de registros para activar la limpieza automática.', 'wc-api-auditor' ) . '</em></p>';
+        } else {
+            echo '<p>' . esc_html__( 'Política activa:', 'wc-api-auditor' ) . ' ' . sprintf( esc_html__( '%1$s días de retención, máximo %2$s registros (0 = sin límite).', 'wc-api-auditor' ), intval( $days ), intval( $max_records ) ) . '</p>';
+        }
+
+        if ( ! empty( $errors ) ) {
+            echo '<p class="description" style="color:#b91c1c;">' . esc_html( implode( ' ', $errors ) ) . '</p>';
         }
 
         echo '</div>';
@@ -523,6 +565,8 @@ class WC_API_Auditor_Admin {
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $blocked_raw      = isset( $_POST['blocked_endpoints'] ) ? wp_unslash( $_POST['blocked_endpoints'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $retention_days   = isset( $_POST['retention_days'] ) ? intval( $_POST['retention_days'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $retention_limit  = isset( $_POST['retention_max_records'] ) ? intval( $_POST['retention_max_records'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
@@ -531,6 +575,8 @@ class WC_API_Auditor_Admin {
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
             'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
             'blocked_endpoints'  => $logger->sanitize_blocked_endpoints_list( $blocked_raw ),
+            'retention_days'      => max( 0, $retention_days ),
+            'retention_max_records' => max( 0, $retention_limit ),
         );
 
         update_option( 'wc_api_auditor_settings', $settings );

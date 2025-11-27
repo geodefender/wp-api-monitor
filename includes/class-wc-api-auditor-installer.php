@@ -53,6 +53,10 @@ class WC_API_Auditor_Installer {
         if ( ! get_option( 'wc_api_auditor_settings' ) ) {
             update_option( 'wc_api_auditor_settings', WC_API_Auditor_Logger::get_default_settings() );
         }
+
+        if ( ! wp_next_scheduled( 'wc_api_auditor_cleanup' ) ) {
+            wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', 'wc_api_auditor_cleanup' );
+        }
     }
 
     /**
@@ -63,6 +67,10 @@ class WC_API_Auditor_Installer {
 
         if ( version_compare( $installed_version, WC_API_AUDITOR_DB_VERSION, '<' ) ) {
             self::install();
+        }
+
+        if ( ! wp_next_scheduled( 'wc_api_auditor_cleanup' ) ) {
+            wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', 'wc_api_auditor_cleanup' );
         }
     }
 }
