@@ -169,9 +169,10 @@ class WC_API_Auditor_Admin {
                 border: 1px solid #ddd;
                 padding: 10px;
                 border-radius: 4px;
-                font-family: monospace;
                 max-height: 400px;
-                overflow: auto;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 13px;
                 white-space: pre-wrap;
                 word-break: break-word;
             }
@@ -182,8 +183,8 @@ class WC_API_Auditor_Admin {
 
             .wc-api-auditor-warning {
                 color: #d63638;
-                margin-bottom: 8px;
                 font-weight: 700;
+                margin-bottom: 8px;
             }
         </style>
         <?php
