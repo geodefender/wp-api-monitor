@@ -118,8 +118,9 @@ class WC_API_Auditor_Admin {
                             </tr>
                             <tr id="wc-api-auditor-detail-<?php echo esc_attr( $log->id ); ?>" style="display:none;">
                                 <td colspan="7">
+                                    <?php $request_pre_id = 'wc-api-auditor-pre-' . $log->id . '-request'; ?>
                                     <strong><?php esc_html_e( 'Request', 'wc-api-auditor' ); ?>:</strong>
-                                    <?php $this->render_json_pretty( 'Request', $log->request_payload ); ?>
+                                    <?php $this->render_json_pretty( 'Request', $log->request_payload, $request_pre_id ); ?>
                                     <?php
                                     $raw_body            = '';
                                     $raw_body_truncated  = false;
@@ -141,14 +142,16 @@ class WC_API_Auditor_Admin {
 
                                     if ( '' !== $raw_body ) :
                                     ?>
+                                        <?php $raw_body_pre_id = 'wc-api-auditor-pre-' . $log->id . '-raw-body'; ?>
                                         <strong><?php esc_html_e( 'Raw body', 'wc-api-auditor' ); ?>:</strong>
-                                        <?php $this->render_json_pretty( 'Raw body', $raw_body ); ?>
+                                        <?php $this->render_json_pretty( 'Raw body', $raw_body, $raw_body_pre_id ); ?>
                                         <?php if ( $raw_body_truncated ) : ?>
                                             <em><?php esc_html_e( 'El cuerpo fue truncado para cumplir con el límite de almacenamiento.', 'wc-api-auditor' ); ?></em>
                                         <?php endif; ?>
                                     <?php endif; ?>
+                                    <?php $response_pre_id = 'wc-api-auditor-pre-' . $log->id . '-response'; ?>
                                     <strong><?php esc_html_e( 'Response', 'wc-api-auditor' ); ?>:</strong>
-                                    <?php $this->render_json_pretty( 'Response', $log->response_body ); ?>
+                                    <?php $this->render_json_pretty( 'Response', $log->response_body, $response_pre_id ); ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -166,6 +169,33 @@ class WC_API_Auditor_Admin {
                     row.style.display = 'none';
                 }
             }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                var copyButtons = document.querySelectorAll('.copy-json');
+                var copiedLabel = '<?php echo esc_js( __( 'Copiado!', 'wc-api-auditor' ) ); ?>';
+
+                copyButtons.forEach(function(button) {
+                    button.addEventListener('click', function() {
+                        var targetId = button.getAttribute('data-target');
+                        var preElement = document.getElementById(targetId);
+
+                        if (!preElement || !navigator.clipboard) {
+                            return;
+                        }
+
+                        var originalText = button.textContent;
+                        navigator.clipboard.writeText(preElement.innerText).then(function() {
+                            button.textContent = copiedLabel;
+                            button.disabled = true;
+
+                            setTimeout(function() {
+                                button.textContent = originalText;
+                                button.disabled = false;
+                            }, 1500);
+                        });
+                    });
+                });
+            });
         </script>
         <style type="text/css">
             .wc-api-auditor-method {
@@ -244,12 +274,18 @@ class WC_API_Auditor_Admin {
      * @param string $label     Label to display in warning messages.
      * @param string $raw_value Raw value to render.
      */
-    private function render_json_pretty( $label, $raw_value ) {
+    private function render_json_pretty( $label, $raw_value, $pre_id = '' ) {
         $raw_value           = (string) $raw_value;
         $contains_truncation = ( false !== strpos( $raw_value, '[TRUNCADO]' ) );
         $decoded_value       = json_decode( $raw_value, true );
         $is_json             = ( JSON_ERROR_NONE === json_last_error() );
         $rendered_value      = $raw_value;
+
+        if ( empty( $pre_id ) ) {
+            $pre_id = 'wc-api-auditor-pre-' . wp_rand();
+        }
+
+        $pre_id = sanitize_key( $pre_id );
 
         if ( $is_json ) {
             $pretty_json = wp_json_encode( $decoded_value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
@@ -260,6 +296,11 @@ class WC_API_Auditor_Admin {
         }
 
         echo '<div class="wc-api-auditor-json">';
+        echo '<div class="wc-api-auditor-json__actions">';
+        echo '<button type="button" class="button copy-json" data-target="' . esc_attr( $pre_id ) . '">';
+        esc_html_e( 'Copiar JSON', 'wc-api-auditor' );
+        echo '</button>';
+        echo '</div>';
 
         if ( $contains_truncation ) {
             printf(
@@ -285,7 +326,7 @@ class WC_API_Auditor_Admin {
             );
         }
 
-        echo '<pre>' . $rendered_value_display . '</pre>';
+        echo '<pre id="' . esc_attr( $pre_id ) . '">' . $rendered_value_display . '</pre>';
         echo '</div>';
     }
 
