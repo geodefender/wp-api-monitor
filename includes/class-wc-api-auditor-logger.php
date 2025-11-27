@@ -75,6 +75,8 @@ class WC_API_Auditor_Logger {
         add_filter( 'rest_post_dispatch', array( $this, 'capture_post_dispatch' ), 20, 3 );
         add_action( 'woocommerce_api_request', array( $this, 'capture_legacy_request' ), 10, 2 );
         add_filter( 'rest_endpoints', array( $this, 'filter_rest_endpoints' ), 10, 1 );
+        add_action( 'wc_api_auditor_cleanup', array( $this, 'run_retention_cleanup' ) );
+        add_action( 'init', array( $this, 'maybe_schedule_cleanup' ) );
     }
 
     /**
@@ -708,6 +710,8 @@ class WC_API_Auditor_Logger {
             $stored['payload_max_length'] = self::DEFAULT_STORAGE_LIMIT;
         }
         $stored['blocked_endpoints'] = $this->sanitize_blocked_endpoints_list( isset( $stored['blocked_endpoints'] ) ? $stored['blocked_endpoints'] : array() );
+        $stored['retention_days']         = isset( $stored['retention_days'] ) ? max( 0, absint( $stored['retention_days'] ) ) : 0;
+        $stored['retention_max_records']  = isset( $stored['retention_max_records'] ) ? max( 0, absint( $stored['retention_max_records'] ) ) : 0;
 
         $this->settings = wp_parse_args( $stored, $defaults );
 
@@ -734,6 +738,8 @@ class WC_API_Auditor_Logger {
             'extra_namespaces'  => array(),
             'payload_max_length' => self::DEFAULT_STORAGE_LIMIT,
             'blocked_endpoints'  => array(),
+            'retention_days'         => 0,
+            'retention_max_records'  => 0,
         );
     }
 
@@ -797,6 +803,83 @@ class WC_API_Auditor_Logger {
         }
 
         return array_values( array_unique( $clean ) );
+    }
+
+    /**
+     * Register cron job if not scheduled yet.
+     */
+    public function maybe_schedule_cleanup() {
+        if ( ! wp_next_scheduled( 'wc_api_auditor_cleanup' ) ) {
+            wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', 'wc_api_auditor_cleanup' );
+        }
+    }
+
+    /**
+     * Apply retention rules to purge old or excess records.
+     */
+    public function run_retention_cleanup() {
+        global $wpdb;
+
+        $settings = $this->get_settings();
+        $table    = $wpdb->prefix . 'wc_api_audit_log';
+
+        $status = array(
+            'last_run' => current_time( 'mysql' ),
+            'deleted'  => 0,
+            'policy'   => array(
+                'retention_days'        => isset( $settings['retention_days'] ) ? absint( $settings['retention_days'] ) : 0,
+                'retention_max_records' => isset( $settings['retention_max_records'] ) ? absint( $settings['retention_max_records'] ) : 0,
+            ),
+            'errors'   => array(),
+            'result'   => 'skipped',
+        );
+
+        $retention_days        = $status['policy']['retention_days'];
+        $retention_max_records = $status['policy']['retention_max_records'];
+
+        if ( 0 === $retention_days && 0 === $retention_max_records ) {
+            update_option( 'wc_api_auditor_cleanup_status', $status );
+            return;
+        }
+
+        if ( $retention_days > 0 ) {
+            $threshold = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - ( $retention_days * DAY_IN_SECONDS ) );
+            $result    = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE timestamp < %s", $threshold ) );
+
+            if ( false !== $result ) {
+                $status['deleted'] += (int) $result;
+            } else {
+                $status['errors'][] = __( 'No se pudo limpiar por antigüedad.', 'wc-api-auditor' );
+            }
+        }
+
+        if ( $retention_max_records > 0 ) {
+            $total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+
+            if ( $total > $retention_max_records ) {
+                $offset  = $retention_max_records - 1;
+                $cutoff  = $wpdb->get_var( $wpdb->prepare( "SELECT timestamp FROM {$table} ORDER BY timestamp DESC LIMIT 1 OFFSET %d", $offset ) );
+                $deleted = 0;
+
+                if ( $cutoff ) {
+                    $deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE timestamp < %s", $cutoff ) );
+                }
+
+                if ( false !== $deleted ) {
+                    $status['deleted'] += (int) $deleted;
+                } else {
+                    $status['errors'][] = __( 'No se pudo limpiar por límite de registros.', 'wc-api-auditor' );
+                }
+            }
+        }
+
+        if ( empty( $status['errors'] ) ) {
+            $status['result'] = 'success';
+        } else {
+            $status['result'] = 'error';
+        }
+
+        update_option( 'wc_api_auditor_cleanup_status', $status );
     }
 
     /**
