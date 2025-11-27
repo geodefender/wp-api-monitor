@@ -794,38 +794,58 @@ class WC_API_Auditor_Admin {
         header( 'Content-Disposition: attachment; filename=wc-api-logs.csv' );
 
         $output  = fopen( 'php://output', 'w' );
-        $header  = array(
-            'timestamp',
-            'http_method',
-            'endpoint',
-            'api_key_display',
-            'ip_address',
-            'response_code',
-            'request_payload',
-            'response_body',
+        $header = (object) array(
+            'timestamp'       => 'timestamp',
+            'http_method'     => 'method',
+            'endpoint'        => 'endpoint',
+            'api_key_display' => 'api_key_display',
+            'ip_address'      => 'ip_address',
+            'response_code'   => 'response_code',
+            'request_payload' => 'request_payload',
+            'response_body'   => 'response_body',
+            'raw_body'        => 'raw_body',
         );
-        $rows    = array();
-        $rows[]  = $header;
+
+        fwrite( $output, $this->build_csv_line( $header ) );
 
         foreach ( $logs as $log ) {
-            $rows[] = array(
-                isset( $log->timestamp ) ? $log->timestamp : '',
-                isset( $log->http_method ) ? $log->http_method : '',
-                isset( $log->endpoint ) ? $log->endpoint : '',
-                isset( $log->api_key_display ) ? $log->api_key_display : '',
-                isset( $log->ip_address ) ? $log->ip_address : '',
-                isset( $log->response_code ) ? $log->response_code : '',
-                isset( $log->request_payload ) ? $log->request_payload : '',
-                isset( $log->response_body ) ? $log->response_body : '',
+            $row = (object) array(
+                'timestamp'       => isset( $log->timestamp ) ? $log->timestamp : '',
+                'http_method'     => isset( $log->http_method ) ? $log->http_method : '',
+                'endpoint'        => isset( $log->endpoint ) ? $log->endpoint : '',
+                'api_key_display' => isset( $log->api_key_display ) ? $log->api_key_display : '',
+                'ip_address'      => isset( $log->ip_address ) ? $log->ip_address : '',
+                'response_code'   => isset( $log->response_code ) ? $log->response_code : '',
+                'request_payload' => isset( $log->request_payload ) ? $log->request_payload : '',
+                'response_body'   => isset( $log->response_body ) ? $log->response_body : '',
+                'raw_body'        => isset( $log->raw_body ) ? $log->raw_body : '',
             );
-        }
 
-        foreach ( $rows as $row ) {
-            $escaped = array_map( array( $this, 'csv_escape' ), $row );
-            fwrite( $output, implode( ',', $escaped ) . "\r\n" );
+            fwrite( $output, $this->build_csv_line( $row ) );
         }
 
         fclose( $output );
+    }
+
+    /**
+     * Build a single CSV line using RFC 4180 rules.
+     *
+     * @param object $row Log row data.
+     *
+     * @return string
+     */
+    private function build_csv_line( $row ) {
+        return
+            $this->csv_escape( $row->timestamp ) . ',' .
+            $this->csv_escape( $row->http_method ) . ',' .
+            $this->csv_escape( $row->endpoint ) . ',' .
+            $this->csv_escape( $row->api_key_display ) . ',' .
+            $this->csv_escape( $row->ip_address ) . ',' .
+            $this->csv_escape( $row->response_code ) . ',' .
+            $this->csv_escape( $row->request_payload ) . ',' .
+            $this->csv_escape( $row->response_body ) . ',' .
+            $this->csv_escape( $row->raw_body ) .
+            "\n";
     }
 
     /**
@@ -836,33 +856,14 @@ class WC_API_Auditor_Admin {
      * @return string
      */
     private function csv_escape( $value ) {
-        $sanitized = $this->sanitize_export_value( $value );
-        $escaped   = str_replace( '"', '""', $sanitized );
-
-        return '"' . $escaped . '"';
-    }
-
-    /**
-     * Sanitize values for CSV export.
-     *
-     * @param mixed $value Value to sanitize.
-     *
-     * @return string
-     */
-    private function sanitize_export_value( $value ) {
         if ( is_array( $value ) || is_object( $value ) ) {
-            $value = wp_json_encode( $value );
+            $value = json_encode( $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT );
         }
 
-        if ( is_bool( $value ) ) {
-            $value = $value ? '1' : '0';
-        }
+        $value = (string) $value;
+        $value = str_replace( '"', '""', $value );
 
-        if ( null === $value ) {
-            $value = '';
-        }
-
-        return wp_kses( (string) $value, array() );
+        return '"' . $value . '"';
     }
 
     /**
