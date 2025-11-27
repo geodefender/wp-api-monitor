@@ -882,7 +882,8 @@ class WC_API_Auditor_Admin {
         }
 
         $value = (string) $value;
-        $value = str_replace( '"', '""', $value );
+        // Escape double quotes per RFC 4180 before wrapping.
+        $value = str_replace( "\"", "\"\"", $value );
 
         return '"' . $value . '"';
     }
