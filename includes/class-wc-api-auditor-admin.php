@@ -196,9 +196,19 @@ class WC_API_Auditor_Admin {
      * @param string $raw_value Raw value to render.
      */
     private function render_json_pretty( $label, $raw_value ) {
+        $raw_value           = (string) $raw_value;
         $contains_truncation = ( false !== strpos( $raw_value, '[TRUNCADO]' ) );
         $decoded_value       = json_decode( $raw_value, true );
         $is_json             = ( JSON_ERROR_NONE === json_last_error() );
+        $rendered_value      = $raw_value;
+
+        if ( $is_json ) {
+            $pretty_json = wp_json_encode( $decoded_value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+
+            if ( false !== $pretty_json ) {
+                $rendered_value = $pretty_json;
+            }
+        }
 
         echo '<div class="wc-api-auditor-json">';
 
@@ -213,13 +223,7 @@ class WC_API_Auditor_Admin {
             );
         }
 
-        if ( $is_json ) {
-            $pretty_json = json_encode( $decoded_value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-            echo '<pre>' . esc_html( $pretty_json ) . '</pre>';
-        } else {
-            echo '<pre>' . esc_html( $raw_value ) . '</pre>';
-        }
-
+        echo '<pre>' . esc_html( $rendered_value ) . '</pre>';
         echo '</div>';
     }
 
