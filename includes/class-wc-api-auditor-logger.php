@@ -77,10 +77,16 @@ class WC_API_Auditor_Logger {
     public function capture_legacy_request( $api, $endpoint ) {
         $request_key = wp_generate_password( 12, false );
 
+        $endpoint_path = sanitize_text_field( $endpoint );
+
+        if ( ! empty( $_SERVER['QUERY_STRING'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+            $endpoint_path .= '?' . wp_unslash( $_SERVER['QUERY_STRING'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        }
+
         $this->requests[ $request_key ] = array(
             'timestamp'      => current_time( 'mysql' ),
             'http_method'    => isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '',
-            'endpoint'       => sanitize_text_field( $endpoint ),
+            'endpoint'       => $endpoint_path,
             'request_payload'=> wp_json_encode( $this->get_request_payload() ),
             'api_key_id'     => $this->detect_api_key_id(),
             'api_key_display'=> $this->detect_api_key_display(),
