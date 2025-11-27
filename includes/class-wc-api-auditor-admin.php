@@ -63,6 +63,7 @@ class WC_API_Auditor_Admin {
             wp_die( esc_html__( 'You do not have permission to access this page.', 'wc-api-auditor' ) );
         }
 
+        $this->handle_export();
         $this->handle_delete_actions();
         $this->handle_settings_form();
 
@@ -365,6 +366,7 @@ class WC_API_Auditor_Admin {
         <form method="get" style="margin-bottom: 15px;">
             <input type="hidden" name="page" value="wc-api-auditor" />
             <input type="hidden" name="post_type" value="shop_order" />
+            <?php wp_nonce_field( 'wc_api_auditor_export_action', 'wc_api_auditor_export_nonce', true ); ?>
             <label>
                 <?php esc_html_e( 'Desde', 'wc-api-auditor' ); ?>
                 <input type="date" name="from" value="<?php echo esc_attr( $filters['from'] ); ?>" />
@@ -391,6 +393,7 @@ class WC_API_Auditor_Admin {
                 <input type="text" name="endpoint" value="<?php echo esc_attr( $filters['endpoint'] ); ?>" />
             </label>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Filtrar', 'wc-api-auditor' ); ?></button>
+            <button class="button" type="submit" name="export" value="csv"><?php esc_html_e( 'Exportar CSV', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
     }
@@ -586,6 +589,34 @@ class WC_API_Auditor_Admin {
     }
 
     /**
+     * Handle CSV export from filters.
+     */
+    private function handle_export() {
+        $export = isset( $_GET['export'] ) ? sanitize_text_field( wp_unslash( $_GET['export'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        if ( 'csv' !== $export ) {
+            return;
+        }
+
+        $nonce = isset( $_GET['wc_api_auditor_export_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['wc_api_auditor_export_nonce'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        if ( ! wp_verify_nonce( $nonce, 'wc_api_auditor_export_action' ) ) {
+            wp_die( esc_html__( 'Nonce de exportación no válido.', 'wc-api-auditor' ) );
+        }
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( esc_html__( 'You do not have permission to access this page.', 'wc-api-auditor' ) );
+        }
+
+        $filters = $this->get_filters();
+        $logs    = $this->get_all_logs( $filters );
+
+        $this->export_logs_as_csv( $logs );
+
+        exit;
+    }
+
+    /**
      * Handle delete actions (single or all logs).
      */
     private function handle_delete_actions() {
@@ -696,6 +727,126 @@ class WC_API_Auditor_Admin {
         );
 
         return $wpdb->get_results( $query );
+    }
+
+    /**
+     * Get all logs matching filters without pagination.
+     *
+     * @param array $filters Filters.
+     *
+     * @return array
+     */
+    private function get_all_logs( $filters ) {
+        global $wpdb;
+
+        $table      = $wpdb->prefix . 'wc_api_audit_log';
+        $where      = array();
+        $values     = array();
+        $start_date = $filters['from'];
+        $end_date   = $filters['to'];
+
+        if ( ! empty( $start_date ) ) {
+            $where[]  = 'timestamp >= %s';
+            $values[] = $start_date . ' 00:00:00';
+        }
+
+        if ( ! empty( $end_date ) ) {
+            $where[]  = 'timestamp <= %s';
+            $values[] = $end_date . ' 23:59:59';
+        }
+
+        if ( ! empty( $filters['method'] ) ) {
+            $where[]  = 'http_method = %s';
+            $values[] = strtoupper( $filters['method'] );
+        }
+
+        if ( ! empty( $filters['api_key'] ) ) {
+            $where[]  = '(api_key_display LIKE %s OR api_key_id = %d)';
+            $values[] = '%' . $wpdb->esc_like( $filters['api_key'] ) . '%';
+            $values[] = intval( $filters['api_key'] );
+        }
+
+        if ( ! empty( $filters['endpoint'] ) ) {
+            $where[]  = 'endpoint LIKE %s';
+            $values[] = '%' . $wpdb->esc_like( $filters['endpoint'] ) . '%';
+        }
+
+        $sql_where = '';
+        if ( ! empty( $where ) ) {
+            $sql_where = 'WHERE ' . implode( ' AND ', $where );
+        }
+
+        $query = $wpdb->prepare( "SELECT * FROM {$table} {$sql_where} ORDER BY timestamp DESC", $values );
+
+        return $wpdb->get_results( $query );
+    }
+
+    /**
+     * Export logs as CSV output.
+     *
+     * @param array $logs Logs to export.
+     */
+    private function export_logs_as_csv( $logs ) {
+        nocache_headers();
+        header( 'Content-Type: text/csv; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename=wc-api-logs.csv' );
+
+        $output = fopen( 'php://output', 'w' );
+
+        fputcsv(
+            $output,
+            array(
+                'timestamp',
+                'http_method',
+                'endpoint',
+                'api_key_display',
+                'ip_address',
+                'response_code',
+                'request_payload',
+                'response_body',
+            )
+        );
+
+        foreach ( $logs as $log ) {
+            fputcsv(
+                $output,
+                array(
+                    $this->sanitize_export_value( isset( $log->timestamp ) ? $log->timestamp : '' ),
+                    $this->sanitize_export_value( isset( $log->http_method ) ? $log->http_method : '' ),
+                    $this->sanitize_export_value( isset( $log->endpoint ) ? $log->endpoint : '' ),
+                    $this->sanitize_export_value( isset( $log->api_key_display ) ? $log->api_key_display : '' ),
+                    $this->sanitize_export_value( isset( $log->ip_address ) ? $log->ip_address : '' ),
+                    $this->sanitize_export_value( isset( $log->response_code ) ? $log->response_code : '' ),
+                    $this->sanitize_export_value( isset( $log->request_payload ) ? $log->request_payload : '' ),
+                    $this->sanitize_export_value( isset( $log->response_body ) ? $log->response_body : '' ),
+                )
+            );
+        }
+
+        fclose( $output );
+    }
+
+    /**
+     * Sanitize values for CSV export.
+     *
+     * @param mixed $value Value to sanitize.
+     *
+     * @return string
+     */
+    private function sanitize_export_value( $value ) {
+        if ( is_array( $value ) || is_object( $value ) ) {
+            $value = wp_json_encode( $value );
+        }
+
+        if ( is_bool( $value ) ) {
+            $value = $value ? '1' : '0';
+        }
+
+        if ( null === $value ) {
+            $value = '';
+        }
+
+        return wp_kses( (string) $value, array() );
     }
 
     /**
