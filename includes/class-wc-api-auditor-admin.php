@@ -78,6 +78,7 @@ class WC_API_Auditor_Admin {
         <div class="wrap">
             <h1><?php echo esc_html__( 'WooCommerce API Auditor', 'wc-api-auditor' ); ?></h1>
             <?php settings_errors( 'wc_api_auditor_settings' ); ?>
+            <?php $this->render_blocked_notice( $settings ); ?>
             <?php $this->render_settings_form( $settings ); ?>
             <?php $this->render_filters( $filters ); ?>
             <?php $this->render_delete_all_form(); ?>
@@ -438,9 +439,43 @@ class WC_API_Auditor_Admin {
                 <input type="number" min="1" name="payload_max_length" value="<?php echo esc_attr( $payload_limit_kb ); ?>" class="small-text" />
             </label>
             <p class="description"><?php esc_html_e( 'Los cuerpos de petición y respuesta que superen este límite se truncarán y se marcarán como [TRUNCADO], guardando un hash del contenido completo para trazabilidad. Valor por defecto: 50 KB.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Endpoints bloqueados (uno por línea)', 'wc-api-auditor' ); ?>
+                <textarea name="blocked_endpoints" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
+            </label>
+            <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas), admite comodín (*) para coincidir con cualquier sufijo y también se evalúa como expresión regular con coincidencia completa. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
+    }
+
+    /**
+     * Render notice for blocked endpoints.
+     *
+     * @param array $settings Current settings.
+     */
+    private function render_blocked_notice( $settings ) {
+        if ( empty( $settings['blocked_endpoints'] ) ) {
+            return;
+        }
+
+        $logger          = WC_API_Auditor_Logger::get_instance();
+        $blocked_routes  = $logger->get_last_blocked_routes();
+        $blocked_message = esc_html__( 'Se están bloqueando endpoints REST según la configuración. Esto puede impedir acceso a ciertas rutas.', 'wc-api-auditor' );
+
+        echo '<div class="notice notice-warning"><p>' . esc_html( $blocked_message ) . '</p>';
+
+        if ( ! empty( $blocked_routes ) ) {
+            echo '<p><strong>' . esc_html__( 'Rutas omitidas recientemente:', 'wc-api-auditor' ) . '</strong></p><ul>';
+            foreach ( $blocked_routes as $route ) {
+                echo '<li>' . esc_html( $route ) . '</li>';
+            }
+            echo '</ul>';
+        } else {
+            echo '<p><em>' . esc_html__( 'No se han registrado coincidencias aún, pero las rutas configuradas se eliminarán del índice REST si coinciden.', 'wc-api-auditor' ) . '</em></p>';
+        }
+
+        echo '</div>';
     }
 
     /**
@@ -487,6 +522,7 @@ class WC_API_Auditor_Admin {
         $capture_extended = isset( $_POST['capture_extended'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $blocked_raw      = isset( $_POST['blocked_endpoints'] ) ? wp_unslash( $_POST['blocked_endpoints'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
@@ -494,6 +530,7 @@ class WC_API_Auditor_Admin {
             'capture_extended' => (bool) $capture_extended,
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
             'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
+            'blocked_endpoints'  => $logger->sanitize_blocked_endpoints_list( $blocked_raw ),
         );
 
         update_option( 'wc_api_auditor_settings', $settings );
