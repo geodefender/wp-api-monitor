@@ -39,6 +39,7 @@ class WC_API_Auditor_Admin {
      */
     public function init() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
+        add_action( 'admin_post_wc_api_auditor_export', array( $this, 'handle_export' ) );
     }
 
     /**
@@ -363,9 +364,10 @@ class WC_API_Auditor_Admin {
      */
     private function render_filters( $filters ) {
         ?>
-        <form method="get" style="margin-bottom: 15px;">
+        <form method="get" style="margin-bottom: 15px;" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
             <input type="hidden" name="page" value="wc-api-auditor" />
             <input type="hidden" name="post_type" value="shop_order" />
+            <input type="hidden" name="action" value="wc_api_auditor_export" />
             <?php wp_nonce_field( 'wc_api_auditor_export_action', 'wc_api_auditor_export_nonce', true ); ?>
             <label>
                 <?php esc_html_e( 'Desde', 'wc-api-auditor' ); ?>
@@ -591,7 +593,7 @@ class WC_API_Auditor_Admin {
     /**
      * Handle CSV export from filters.
      */
-    private function handle_export() {
+    public function handle_export() {
         $export = isset( $_GET['export'] ) ? sanitize_text_field( wp_unslash( $_GET['export'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
         if ( 'csv' !== $export ) {
