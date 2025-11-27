@@ -443,7 +443,7 @@ class WC_API_Auditor_Admin {
                 <?php esc_html_e( 'Endpoints bloqueados (uno por línea)', 'wc-api-auditor' ); ?>
                 <textarea name="blocked_endpoints" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
             </label>
-            <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Ejemplos: /wp/v2/users o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
+            <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
