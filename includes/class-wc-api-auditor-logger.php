@@ -46,6 +46,13 @@ class WC_API_Auditor_Logger {
     private $settings = null;
 
     /**
+     * Tracks routes removed from the REST API during the last filter call.
+     *
+     * @var array
+     */
+    private $last_blocked_routes = array();
+
+    /**
      * Get singleton instance.
      *
      * @return WC_API_Auditor_Logger
@@ -66,6 +73,7 @@ class WC_API_Auditor_Logger {
         add_filter( 'rest_request_after_callbacks', array( $this, 'capture_response' ), 20, 3 );
         add_filter( 'rest_post_dispatch', array( $this, 'capture_post_dispatch' ), 20, 3 );
         add_action( 'woocommerce_api_request', array( $this, 'capture_legacy_request' ), 10, 2 );
+        add_filter( 'rest_endpoints', array( $this, 'filter_rest_endpoints' ), 10, 1 );
     }
 
     /**
@@ -251,6 +259,10 @@ class WC_API_Auditor_Logger {
     private function is_woocommerce_request( $request ) {
         $route = $request->get_route();
         $settings = $this->get_settings();
+
+        if ( $this->is_route_blocked( $route, $settings['blocked_endpoints'] ) ) {
+            return false;
+        }
 
         if ( ! empty( $settings['capture_all'] ) ) {
             return true;
@@ -675,6 +687,7 @@ class WC_API_Auditor_Logger {
         if ( $stored['payload_max_length'] <= 0 ) {
             $stored['payload_max_length'] = self::DEFAULT_STORAGE_LIMIT;
         }
+        $stored['blocked_endpoints'] = $this->sanitize_blocked_endpoints_list( isset( $stored['blocked_endpoints'] ) ? $stored['blocked_endpoints'] : array() );
 
         $this->settings = wp_parse_args( $stored, $defaults );
 
@@ -686,6 +699,7 @@ class WC_API_Auditor_Logger {
      */
     public function refresh_settings() {
         $this->settings = null;
+        $this->last_blocked_routes = array();
     }
 
     /**
@@ -699,6 +713,7 @@ class WC_API_Auditor_Logger {
             'capture_extended'  => false,
             'extra_namespaces'  => array(),
             'payload_max_length' => self::DEFAULT_STORAGE_LIMIT,
+            'blocked_endpoints'  => array(),
         );
     }
 
@@ -731,6 +746,111 @@ class WC_API_Auditor_Logger {
         }
 
         return array_values( array_unique( $clean ) );
+    }
+
+    /**
+     * Normalize blocked endpoints input.
+     *
+     * @param array|string $endpoints Endpoints input.
+     *
+     * @return array
+     */
+    public function sanitize_blocked_endpoints_list( $endpoints ) {
+        if ( is_string( $endpoints ) ) {
+            $endpoints = preg_split( '/[\r\n,]+/', $endpoints );
+        }
+
+        if ( ! is_array( $endpoints ) ) {
+            return array();
+        }
+
+        $clean = array();
+
+        foreach ( $endpoints as $endpoint ) {
+            $endpoint = sanitize_text_field( wp_strip_all_tags( $endpoint ) );
+
+            if ( '' === $endpoint ) {
+                continue;
+            }
+
+            $clean[] = $endpoint;
+        }
+
+        return array_values( array_unique( $clean ) );
+    }
+
+    /**
+     * Determine if a REST route should be blocked.
+     *
+     * @param string $route     Route to test.
+     * @param array  $patterns  Block list patterns.
+     *
+     * @return bool
+     */
+    private function is_route_blocked( $route, $patterns ) {
+        if ( empty( $patterns ) || ! is_array( $patterns ) ) {
+            return false;
+        }
+
+        foreach ( $patterns as $pattern ) {
+            $pattern = trim( $pattern );
+
+            if ( '' === $pattern ) {
+                continue;
+            }
+
+            if ( 0 === strcasecmp( $route, $pattern ) ) {
+                return true;
+            }
+
+            $regex = '#^' . str_replace( '#', '\#', $pattern ) . '$#i';
+
+            $match = @preg_match( $regex, $route ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
+            if ( false !== $match && $match > 0 ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Remove blocked endpoints from the REST API index.
+     *
+     * @param array $endpoints Registered endpoints.
+     *
+     * @return array
+     */
+    public function filter_rest_endpoints( $endpoints ) {
+        $settings = $this->get_settings();
+
+        if ( empty( $settings['blocked_endpoints'] ) || ! is_array( $settings['blocked_endpoints'] ) ) {
+            $this->last_blocked_routes = array();
+            return $endpoints;
+        }
+
+        $blocked_routes = array();
+
+        foreach ( $endpoints as $route => $handlers ) {
+            if ( $this->is_route_blocked( $route, $settings['blocked_endpoints'] ) ) {
+                unset( $endpoints[ $route ] );
+                $blocked_routes[] = $route;
+            }
+        }
+
+        $this->last_blocked_routes = $blocked_routes;
+
+        return $endpoints;
+    }
+
+    /**
+     * Get last blocked route list.
+     *
+     * @return array
+     */
+    public function get_last_blocked_routes() {
+        return $this->last_blocked_routes;
     }
 
     /**
