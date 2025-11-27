@@ -101,7 +101,11 @@ class WC_API_Auditor_Admin {
                         <?php foreach ( $logs as $log ) : ?>
                             <tr>
                                 <td><?php echo esc_html( $log->timestamp ); ?></td>
-                                <td><?php echo esc_html( strtoupper( $log->http_method ) ); ?></td>
+                                <?php
+                                $method       = strtoupper( $log->http_method );
+                                $method_class = 'wc-api-auditor-method wc-api-auditor-method--' . sanitize_html_class( strtolower( $method ) );
+                                ?>
+                                <td><span class="<?php echo esc_attr( $method_class ); ?>"><?php echo esc_html( $method ); ?></span></td>
                                 <td><?php echo esc_html( $log->endpoint ); ?></td>
                                 <td><?php echo esc_html( $log->api_key_display ? $log->api_key_display : __( 'No detectada', 'wc-api-auditor' ) ); ?></td>
                                 <td><?php echo esc_html( $log->ip_address ); ?></td>
@@ -164,6 +168,42 @@ class WC_API_Auditor_Admin {
             }
         </script>
         <style type="text/css">
+            .wc-api-auditor-method {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-weight: 600;
+                font-size: 12px;
+                background: #f1f5f9;
+                color: #0f172a;
+            }
+
+            .wc-api-auditor-method--get {
+                background: #e6f4ea;
+                color: #0f5132;
+            }
+
+            .wc-api-auditor-method--post {
+                background: #e0ecff;
+                color: #1d4ed8;
+            }
+
+            .wc-api-auditor-method--delete {
+                background: #fde2e1;
+                color: #b91c1c;
+            }
+
+            .wc-api-auditor-method--put,
+            .wc-api-auditor-method--patch,
+            .wc-api-auditor-method--head,
+            .wc-api-auditor-method--options,
+            .wc-api-auditor-method--trace,
+            .wc-api-auditor-method--connect,
+            .wc-api-auditor-method--other {
+                background: #f1f5f9;
+                color: #0f172a;
+            }
+
             .wc-api-auditor-json {
                 background: #f7f7f7;
                 border: 1px solid #ddd;
