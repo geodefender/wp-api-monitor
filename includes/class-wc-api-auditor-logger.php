@@ -803,7 +803,21 @@ class WC_API_Auditor_Logger {
                 return true;
             }
 
-            $regex = '#^' . str_replace( '#', '\#', $pattern ) . '$#i';
+            if ( strlen( $pattern ) >= 2 && '/*' === substr( $pattern, -2 ) ) {
+                $prefix = rtrim( substr( $pattern, 0, -1 ), '/' ) . '/';
+
+                if ( 0 === strncasecmp( $route, $prefix, strlen( $prefix ) ) || 0 === strcasecmp( rtrim( $route, '/' ), rtrim( $prefix, '/' ) ) ) {
+                    return true;
+                }
+            }
+
+            if ( false !== strpos( $pattern, '*' ) ) {
+                $escaped_pattern = preg_quote( $pattern, '#' );
+                $escaped_pattern = str_replace( '\*', '.*', $escaped_pattern );
+                $regex           = '#^' . $escaped_pattern . '$#i';
+            } else {
+                $regex = '#^' . str_replace( '#', '\#', $pattern ) . '$#i';
+            }
 
             $match = @preg_match( $regex, $route ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 
