@@ -63,6 +63,7 @@ class WC_API_Auditor_Admin {
             wp_die( esc_html__( 'You do not have permission to access this page.', 'wc-api-auditor' ) );
         }
 
+        $this->handle_delete_actions();
         $this->handle_settings_form();
 
         $settings = $this->get_settings();
@@ -79,6 +80,7 @@ class WC_API_Auditor_Admin {
             <?php settings_errors( 'wc_api_auditor_settings' ); ?>
             <?php $this->render_settings_form( $settings ); ?>
             <?php $this->render_filters( $filters ); ?>
+            <?php $this->render_delete_all_form(); ?>
             <p><?php printf( esc_html__( 'Mostrando %1$d de %2$d registros.', 'wc-api-auditor' ), count( $logs ), intval( $total ) ); ?></p>
             <table class="widefat fixed striped">
                 <thead>
@@ -90,12 +92,13 @@ class WC_API_Auditor_Admin {
                         <th><?php esc_html_e( 'IP', 'wc-api-auditor' ); ?></th>
                         <th><?php esc_html_e( 'Código', 'wc-api-auditor' ); ?></th>
                         <th><?php esc_html_e( 'Detalle', 'wc-api-auditor' ); ?></th>
+                        <th><?php esc_html_e( 'Acciones', 'wc-api-auditor' ); ?></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if ( empty( $logs ) ) : ?>
                         <tr>
-                            <td colspan="7"><?php esc_html_e( 'No hay registros para mostrar.', 'wc-api-auditor' ); ?></td>
+                            <td colspan="8"><?php esc_html_e( 'No hay registros para mostrar.', 'wc-api-auditor' ); ?></td>
                         </tr>
                     <?php else : ?>
                         <?php foreach ( $logs as $log ) : ?>
@@ -115,9 +118,16 @@ class WC_API_Auditor_Admin {
                                         <?php esc_html_e( 'Ver detalle', 'wc-api-auditor' ); ?>
                                     </button>
                                 </td>
+                                <td>
+                                    <form method="post" onsubmit="return confirm('<?php echo esc_js( __( '¿Eliminar este registro?', 'wc-api-auditor' ) ); ?>');">
+                                        <?php wp_nonce_field( 'wc_api_auditor_delete_action', 'wc_api_auditor_delete_nonce' ); ?>
+                                        <input type="hidden" name="delete_log_id" value="<?php echo esc_attr( $log->id ); ?>" />
+                                        <button class="button button-link-delete" type="submit"><?php esc_html_e( 'Eliminar', 'wc-api-auditor' ); ?></button>
+                                    </form>
+                                </td>
                             </tr>
                             <tr id="wc-api-auditor-detail-<?php echo esc_attr( $log->id ); ?>" style="display:none;">
-                                <td colspan="7">
+                                <td colspan="8">
                                     <?php $request_pre_id = 'wc-api-auditor-pre-' . $log->id . '-request'; ?>
                                     <strong><?php esc_html_e( 'Request', 'wc-api-auditor' ); ?>:</strong>
                                     <?php $this->render_json_pretty( 'Request', $log->request_payload, $request_pre_id ); ?>
@@ -385,6 +395,19 @@ class WC_API_Auditor_Admin {
     }
 
     /**
+     * Render delete-all form.
+     */
+    private function render_delete_all_form() {
+        ?>
+        <form method="post" style="margin: 10px 0;" onsubmit="return confirm('<?php echo esc_js( __( '¿Eliminar todos los registros?', 'wc-api-auditor' ) ); ?>');">
+            <?php wp_nonce_field( 'wc_api_auditor_delete_action', 'wc_api_auditor_delete_nonce' ); ?>
+            <input type="hidden" name="delete_all_logs" value="1" />
+            <button class="button button-secondary" type="submit"><?php esc_html_e( 'Borrar todo', 'wc-api-auditor' ); ?></button>
+        </form>
+        <?php
+    }
+
+    /**
      * Render settings form.
      *
      * @param array $settings Current settings.
@@ -395,6 +418,11 @@ class WC_API_Auditor_Admin {
             <?php wp_nonce_field( 'wc_api_auditor_settings_action', 'wc_api_auditor_settings_nonce' ); ?>
             <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
             <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" name="capture_all" value="1" <?php checked( $settings['capture_all'], true ); ?> />
+                <?php esc_html_e( 'Capturar todas las solicitudes REST (todas las rutas)', 'wc-api-auditor' ); ?>
+            </label>
+            <p class="description"><?php esc_html_e( 'Al activarlo se registrará cualquier endpoint REST, no solo los de WooCommerce. Puede aumentar considerablemente el tamaño del log.', 'wc-api-auditor' ); ?></p>
             <label style="display: block; margin-bottom: 10px;">
                 <input type="checkbox" name="capture_extended" value="1" <?php checked( $settings['capture_extended'], true ); ?> />
                 <?php esc_html_e( 'Activar captura ampliada', 'wc-api-auditor' ); ?>
@@ -455,12 +483,14 @@ class WC_API_Auditor_Admin {
             return;
         }
 
+        $capture_all      = isset( $_POST['capture_all'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $capture_extended = isset( $_POST['capture_extended'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
+            'capture_all'      => (bool) $capture_all,
             'capture_extended' => (bool) $capture_extended,
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
             'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
@@ -470,6 +500,52 @@ class WC_API_Auditor_Admin {
         $logger->refresh_settings();
 
         add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_settings_saved', esc_html__( 'Ajustes guardados correctamente.', 'wc-api-auditor' ), 'updated' );
+    }
+
+    /**
+     * Handle delete actions (single or all logs).
+     */
+    private function handle_delete_actions() {
+        if ( ! isset( $_POST['wc_api_auditor_delete_nonce'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return;
+        }
+
+        if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wc_api_auditor_delete_nonce'] ) ), 'wc_api_auditor_delete_action' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return;
+        }
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            return;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'wc_api_audit_log';
+
+        if ( isset( $_POST['delete_log_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            $log_id = absint( $_POST['delete_log_id'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+            if ( $log_id > 0 ) {
+                $deleted = $wpdb->delete( $table, array( 'id' => $log_id ), array( '%d' ) );
+
+                if ( false !== $deleted ) {
+                    add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_log_deleted', esc_html__( 'Registro eliminado correctamente.', 'wc-api-auditor' ), 'updated' );
+                } else {
+                    add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_log_delete_failed', esc_html__( 'No se pudo eliminar el registro.', 'wc-api-auditor' ), 'error' );
+                }
+            }
+
+            return;
+        }
+
+        if ( isset( $_POST['delete_all_logs'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            $result = $wpdb->query( "TRUNCATE TABLE {$table}" );
+
+            if ( false !== $result ) {
+                add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_logs_cleared', esc_html__( 'Todos los registros fueron eliminados.', 'wc-api-auditor' ), 'updated' );
+            } else {
+                add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_logs_clear_failed', esc_html__( 'No se pudieron eliminar los registros.', 'wc-api-auditor' ), 'error' );
+            }
+        }
     }
 
     /**
