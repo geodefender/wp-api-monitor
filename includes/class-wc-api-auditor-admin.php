@@ -793,39 +793,53 @@ class WC_API_Auditor_Admin {
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename=wc-api-logs.csv' );
 
-        $output = fopen( 'php://output', 'w' );
-
-        fputcsv(
-            $output,
-            array(
-                'timestamp',
-                'http_method',
-                'endpoint',
-                'api_key_display',
-                'ip_address',
-                'response_code',
-                'request_payload',
-                'response_body',
-            )
+        $output  = fopen( 'php://output', 'w' );
+        $header  = array(
+            'timestamp',
+            'http_method',
+            'endpoint',
+            'api_key_display',
+            'ip_address',
+            'response_code',
+            'request_payload',
+            'response_body',
         );
+        $rows    = array();
+        $rows[]  = $header;
 
         foreach ( $logs as $log ) {
-            fputcsv(
-                $output,
-                array(
-                    $this->sanitize_export_value( isset( $log->timestamp ) ? $log->timestamp : '' ),
-                    $this->sanitize_export_value( isset( $log->http_method ) ? $log->http_method : '' ),
-                    $this->sanitize_export_value( isset( $log->endpoint ) ? $log->endpoint : '' ),
-                    $this->sanitize_export_value( isset( $log->api_key_display ) ? $log->api_key_display : '' ),
-                    $this->sanitize_export_value( isset( $log->ip_address ) ? $log->ip_address : '' ),
-                    $this->sanitize_export_value( isset( $log->response_code ) ? $log->response_code : '' ),
-                    $this->sanitize_export_value( isset( $log->request_payload ) ? $log->request_payload : '' ),
-                    $this->sanitize_export_value( isset( $log->response_body ) ? $log->response_body : '' ),
-                )
+            $rows[] = array(
+                isset( $log->timestamp ) ? $log->timestamp : '',
+                isset( $log->http_method ) ? $log->http_method : '',
+                isset( $log->endpoint ) ? $log->endpoint : '',
+                isset( $log->api_key_display ) ? $log->api_key_display : '',
+                isset( $log->ip_address ) ? $log->ip_address : '',
+                isset( $log->response_code ) ? $log->response_code : '',
+                isset( $log->request_payload ) ? $log->request_payload : '',
+                isset( $log->response_body ) ? $log->response_body : '',
             );
         }
 
+        foreach ( $rows as $row ) {
+            $escaped = array_map( array( $this, 'csv_escape' ), $row );
+            fwrite( $output, implode( ',', $escaped ) . "\r\n" );
+        }
+
         fclose( $output );
+    }
+
+    /**
+     * Escape a single value for RFC 4180 compliant CSV.
+     *
+     * @param mixed $value Value to escape.
+     *
+     * @return string
+     */
+    private function csv_escape( $value ) {
+        $sanitized = $this->sanitize_export_value( $value );
+        $escaped   = str_replace( '"', '""', $sanitized );
+
+        return '"' . $escaped . '"';
     }
 
     /**
