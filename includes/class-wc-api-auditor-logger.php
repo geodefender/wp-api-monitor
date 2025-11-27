@@ -252,6 +252,10 @@ class WC_API_Auditor_Logger {
         $route = $request->get_route();
         $settings = $this->get_settings();
 
+        if ( ! empty( $settings['capture_all'] ) ) {
+            return true;
+        }
+
         $namespaces = array( '/wc/' );
 
         if ( ! empty( $settings['capture_extended'] ) && ! empty( $settings['extra_namespaces'] ) ) {
@@ -664,7 +668,8 @@ class WC_API_Auditor_Logger {
             $stored = array();
         }
 
-        $stored['capture_extended']   = ! empty( $stored['capture_extended'] );
+        $stored['capture_all']      = ! empty( $stored['capture_all'] );
+        $stored['capture_extended'] = ! empty( $stored['capture_extended'] );
         $stored['extra_namespaces']   = $this->sanitize_namespaces_list( isset( $stored['extra_namespaces'] ) ? $stored['extra_namespaces'] : array() );
         $stored['payload_max_length'] = isset( $stored['payload_max_length'] ) ? absint( $stored['payload_max_length'] ) : self::DEFAULT_STORAGE_LIMIT;
         if ( $stored['payload_max_length'] <= 0 ) {
@@ -690,8 +695,9 @@ class WC_API_Auditor_Logger {
      */
     public static function get_default_settings() {
         return array(
-            'capture_extended'   => false,
-            'extra_namespaces'   => array(),
+            'capture_all'       => false,
+            'capture_extended'  => false,
+            'extra_namespaces'  => array(),
             'payload_max_length' => self::DEFAULT_STORAGE_LIMIT,
         );
     }

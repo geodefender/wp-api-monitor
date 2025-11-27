@@ -396,6 +396,11 @@ class WC_API_Auditor_Admin {
             <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
             <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
             <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" name="capture_all" value="1" <?php checked( $settings['capture_all'], true ); ?> />
+                <?php esc_html_e( 'Capturar todas las solicitudes REST (todas las rutas)', 'wc-api-auditor' ); ?>
+            </label>
+            <p class="description"><?php esc_html_e( 'Al activarlo se registrará cualquier endpoint REST, no solo los de WooCommerce. Puede aumentar considerablemente el tamaño del log.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
                 <input type="checkbox" name="capture_extended" value="1" <?php checked( $settings['capture_extended'], true ); ?> />
                 <?php esc_html_e( 'Activar captura ampliada', 'wc-api-auditor' ); ?>
             </label>
@@ -455,12 +460,14 @@ class WC_API_Auditor_Admin {
             return;
         }
 
+        $capture_all      = isset( $_POST['capture_all'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $capture_extended = isset( $_POST['capture_extended'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
+            'capture_all'      => (bool) $capture_all,
             'capture_extended' => (bool) $capture_extended,
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
             'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
