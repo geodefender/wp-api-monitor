@@ -809,6 +809,10 @@ class WC_API_Auditor_Admin {
         fwrite( $output, $this->build_csv_line( $header ) );
 
         foreach ( $logs as $log ) {
+            $request_payload = isset( $log->request_payload ) ? $this->normalize_json_value( $log->request_payload ) : '';
+            $response_body   = isset( $log->response_body ) ? $this->normalize_json_value( $log->response_body ) : '';
+            $raw_body        = isset( $log->raw_body ) ? $this->normalize_json_value( $log->raw_body ) : '';
+
             $row = (object) array(
                 'timestamp'       => isset( $log->timestamp ) ? $log->timestamp : '',
                 'http_method'     => isset( $log->http_method ) ? $log->http_method : '',
@@ -816,9 +820,9 @@ class WC_API_Auditor_Admin {
                 'api_key_display' => isset( $log->api_key_display ) ? $log->api_key_display : '',
                 'ip_address'      => isset( $log->ip_address ) ? $log->ip_address : '',
                 'response_code'   => isset( $log->response_code ) ? $log->response_code : '',
-                'request_payload' => isset( $log->request_payload ) ? $log->request_payload : '',
-                'response_body'   => isset( $log->response_body ) ? $log->response_body : '',
-                'raw_body'        => isset( $log->raw_body ) ? $log->raw_body : '',
+                'request_payload' => $request_payload,
+                'response_body'   => $response_body,
+                'raw_body'        => $raw_body,
             );
 
             fwrite( $output, $this->build_csv_line( $row ) );
@@ -846,6 +850,23 @@ class WC_API_Auditor_Admin {
             $this->csv_escape( $row->response_body ) . ',' .
             $this->csv_escape( $row->raw_body ) .
             "\n";
+    }
+
+    /**
+     * Normalize potential JSON content for CSV output.
+     *
+     * @param string $value Value to normalize.
+     *
+     * @return string
+     */
+    private function normalize_json_value( $value ) {
+        $decoded = json_decode( $value, true );
+
+        if ( JSON_ERROR_NONE === json_last_error() && ( is_array( $decoded ) || is_object( $decoded ) ) ) {
+            return wp_json_encode( $decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+        }
+
+        return $value;
     }
 
     /**
