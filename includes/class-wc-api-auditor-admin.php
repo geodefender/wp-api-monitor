@@ -226,6 +226,14 @@ class WC_API_Auditor_Admin {
                 font-weight: 700;
                 margin-bottom: 8px;
             }
+
+            .wc-api-highlight {
+                background: #fce4ec;
+                color: #c2185b;
+                font-weight: 700;
+                padding: 2px 4px;
+                border-radius: 3px;
+            }
         </style>
         <?php
     }
@@ -264,8 +272,35 @@ class WC_API_Auditor_Admin {
             );
         }
 
-        echo '<pre>' . esc_html( $rendered_value ) . '</pre>';
+        $rendered_value_display = esc_html( $rendered_value );
+
+        if ( $is_json ) {
+            $rendered_value_display = wp_kses(
+                $this->highlight_json_keys( $rendered_value_display ),
+                array(
+                    'span' => array(
+                        'class' => array(),
+                    ),
+                )
+            );
+        }
+
+        echo '<pre>' . $rendered_value_display . '</pre>';
         echo '</div>';
+    }
+
+    /**
+     * Highlight specific header keys within pretty-printed JSON.
+     *
+     * @param string $escaped_json Escaped JSON string ready for display.
+     *
+     * @return string
+     */
+    private function highlight_json_keys( $escaped_json ) {
+        $pattern = '/(&quot;)(authorization|x-wc-webhook-source|content-type|user-agent|x-signature|consumer_key)(&quot;\s*:)/i';
+        $replace = '$1<span class="wc-api-highlight">$2</span>$3';
+
+        return preg_replace( $pattern, $replace, $escaped_json );
     }
 
     /**
