@@ -16,6 +16,7 @@ class WC_API_Auditor_Logger {
 
     const RAW_BODY_MAX_LENGTH = 10000;
     const DEFAULT_STORAGE_LIMIT = 51200; // 50 KB.
+    const HASH_SAMPLE_MAX_LENGTH = 4096;
 
     /**
      * Singleton instance.
@@ -447,14 +448,17 @@ class WC_API_Auditor_Logger {
             return $content;
         }
 
-        $hash          = hash( 'sha256', $content );
-        $truncated     = $this->truncate_string( $content, $limit );
-        $marker        = '[TRUNCADO]';
-        $annotation    = sprintf(
-            '\n\n%s Hash SHA256: %s. Longitud original: %d caracteres.',
+        $hash_sample_length = $this->get_hash_sample_length( $limit );
+        $hash_source        = $this->truncate_string( $content, $hash_sample_length );
+        $hash               = hash( 'sha256', $hash_source );
+        $truncated          = $this->truncate_string( $content, $limit );
+        $marker             = '[TRUNCADO]';
+        $annotation         = sprintf(
+            '\n\n%s Hash SHA256 (parcial): %s. Longitud original: %d caracteres. Hash calculado sobre los primeros %d caracteres.',
             $marker,
             $hash,
-            $length
+            $length,
+            $this->get_string_length( $hash_source )
         );
 
         return $truncated . $annotation;
@@ -485,6 +489,22 @@ class WC_API_Auditor_Logger {
         }
 
         return substr( $string, 0, $limit );
+    }
+
+    /**
+     * Determine the maximum length of content to hash when truncating.
+     *
+     * @param int $storage_limit Configured storage limit.
+     *
+     * @return int
+     */
+    private function get_hash_sample_length( $storage_limit ) {
+        $safe_limit = max(
+            1,
+            function_exists( 'absint' ) ? absint( $storage_limit ) : abs( (int) $storage_limit )
+        );
+
+        return min( $safe_limit, self::HASH_SAMPLE_MAX_LENGTH );
     }
 
     /**
