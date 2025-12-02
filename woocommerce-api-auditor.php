@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Plugin constants.
 define( 'WC_API_AUDITOR_VERSION', '1.0.0' );
-define( 'WC_API_AUDITOR_DB_VERSION', '1.2.0' );
+define( 'WC_API_AUDITOR_DB_VERSION', '1.3.0' );
 define( 'WC_API_AUDITOR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WC_API_AUDITOR_URL', plugin_dir_url( __FILE__ ) );
 define( 'WC_API_AUDITOR_TABLE', 'wp_wc_api_audit_log' );
