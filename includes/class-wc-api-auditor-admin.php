@@ -35,6 +35,48 @@ class WC_API_Auditor_Admin {
     }
 
     /**
+     * Retrieve unique logged endpoints without query strings.
+     *
+     * @return array
+     */
+    private function get_unique_logged_endpoints() {
+        global $wpdb;
+
+        $table     = $wpdb->prefix . 'wc_api_audit_log';
+        $endpoints = $wpdb->get_col( "SELECT endpoint FROM {$table} GROUP BY endpoint" );
+
+        if ( empty( $endpoints ) ) {
+            return array();
+        }
+
+        $normalized = array();
+
+        foreach ( $endpoints as $endpoint ) {
+            $clean_endpoint = $endpoint;
+
+            $parsed = wp_parse_url( $endpoint, PHP_URL_PATH );
+
+            if ( false !== $parsed && null !== $parsed ) {
+                $clean_endpoint = $parsed;
+            }
+
+            $clean_endpoint = strtok( $clean_endpoint, '?' );
+
+            if ( '' === $clean_endpoint || false === $clean_endpoint ) {
+                continue;
+            }
+
+            $normalized[] = $clean_endpoint;
+        }
+
+        $normalized = array_values( array_unique( $normalized ) );
+
+        sort( $normalized, SORT_NATURAL | SORT_FLAG_CASE );
+
+        return $normalized;
+    }
+
+    /**
      * Register admin hooks.
      */
     public function init() {
@@ -340,6 +382,32 @@ class WC_API_Auditor_Admin {
                 font-size: 12px;
                 color: #b91c1c;
             }
+
+            .wc-api-auditor-tabs {
+                margin-bottom: 12px;
+            }
+
+            .wc-api-auditor-tab-panel {
+                display: none;
+                border: 1px solid #c3c4c7;
+                border-top: 0;
+                padding: 15px;
+                background: #fff;
+            }
+
+            .wc-api-auditor-tab-panel.is-active {
+                display: block;
+            }
+
+            .wc-api-auditor-setting {
+                display: block;
+                margin-bottom: 12px;
+            }
+
+            .wc-api-auditor-endpoints-select {
+                min-height: 220px;
+                resize: vertical;
+            }
         </style>
         <?php
     }
@@ -482,56 +550,138 @@ class WC_API_Auditor_Admin {
      * @param array $settings Current settings.
      */
     private function render_settings_form( $settings ) {
+        $logged_endpoints = $this->get_unique_logged_endpoints();
         ?>
-        <form method="post" style="margin-bottom: 20px;" action="<?php echo esc_url( admin_url( 'admin.php?page=wc-api-auditor' ) ); ?>">
+        <form method="post" class="wc-api-auditor-settings" action="<?php echo esc_url( admin_url( 'admin.php?page=wc-api-auditor' ) ); ?>">
             <?php wp_nonce_field( 'wc_api_auditor_settings_action', 'wc_api_auditor_settings_nonce' ); ?>
-            <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
-            <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
-            <label style="display: block; margin-bottom: 10px;">
-                <input type="checkbox" name="capture_all" value="1" <?php checked( $settings['capture_all'], true ); ?> />
-                <?php esc_html_e( 'Capturar todas las solicitudes REST (todas las rutas)', 'wc-api-auditor' ); ?>
-            </label>
-            <p class="description"><?php esc_html_e( 'Al activarlo se registrará cualquier endpoint REST, no solo los de WooCommerce. Puede aumentar considerablemente el tamaño del log.', 'wc-api-auditor' ); ?></p>
-            <label style="display: block; margin-bottom: 10px;">
-                <input type="checkbox" name="capture_extended" value="1" <?php checked( $settings['capture_extended'], true ); ?> />
-                <?php esc_html_e( 'Activar captura ampliada', 'wc-api-auditor' ); ?>
-            </label>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Namespaces adicionales (separados por coma)', 'wc-api-auditor' ); ?>
-                <input type="text" name="extra_namespaces" value="<?php echo esc_attr( implode( ', ', $settings['extra_namespaces'] ) ); ?>" class="regular-text" />
-            </label>
-            <p class="description"><?php esc_html_e( 'Utiliza este ajuste si necesitas auditar otros endpoints (por ejemplo, /wp/v2/). Considera el impacto en el tamaño de la base de datos.', 'wc-api-auditor' ); ?></p>
-            <?php $payload_limit_kb = max( 1, intval( ceil( $settings['payload_max_length'] / 1024 ) ) ); ?>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Límite de almacenamiento para cuerpos (KB)', 'wc-api-auditor' ); ?>
-                <input type="number" min="1" name="payload_max_length" value="<?php echo esc_attr( $payload_limit_kb ); ?>" class="small-text" />
-            </label>
-            <p class="description"><?php esc_html_e( 'Los cuerpos de petición y respuesta que superen este límite se truncarán y se marcarán como [TRUNCADO], guardando un hash del contenido completo para trazabilidad. Valor por defecto: 50 KB.', 'wc-api-auditor' ); ?></p>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Endpoints bloqueados (uno por línea)', 'wc-api-auditor' ); ?>
-                <textarea name="blocked_endpoints" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
-            </label>
-            <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
-            <h2><?php esc_html_e( 'Retención y limpieza automática', 'wc-api-auditor' ); ?></h2>
-            <p><?php esc_html_e( 'Configura cuántos días conservar los registros o establece un límite máximo de filas. La limpieza se ejecuta de forma automática mediante WP-Cron (dos veces al día) usando el índice por fecha para minimizar el impacto.', 'wc-api-auditor' ); ?></p>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Días de retención (0 para desactivar)', 'wc-api-auditor' ); ?>
-                <input type="number" min="0" name="retention_days" value="<?php echo esc_attr( $settings['retention_days'] ); ?>" class="small-text" />
-            </label>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Límite máximo de registros (0 para desactivar)', 'wc-api-auditor' ); ?>
-                <input type="number" min="0" name="retention_max_records" value="<?php echo esc_attr( $settings['retention_max_records'] ); ?>" class="small-text" />
-            </label>
-            <?php $this->render_cleanup_status(); ?>
-            <h2><?php esc_html_e( 'Actualizaciones desde GitHub', 'wc-api-auditor' ); ?></h2>
-            <p><?php esc_html_e( 'Introduce un token personal de GitHub con permiso de lectura para consultar las versiones publicadas en el repositorio oficial. No se almacena en texto plano en ningún archivo y solo se usa para las peticiones de API.', 'wc-api-auditor' ); ?></p>
-            <label style="display: block; margin-bottom: 10px;">
-                <?php esc_html_e( 'Token de GitHub (scope: repo:public_repo o read-only)', 'wc-api-auditor' ); ?>
-                <input type="password" name="github_token" value="<?php echo esc_attr( $settings['github_token'] ); ?>" class="regular-text" autocomplete="off" />
-            </label>
-            <p class="description"><?php esc_html_e( 'Este token solo se enviará a api.github.com para obtener los metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
-            <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
+            <div class="nav-tab-wrapper wc-api-auditor-tabs">
+                <a href="#wc-api-auditor-tab-general" class="nav-tab nav-tab-active wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-general"><?php esc_html_e( 'General', 'wc-api-auditor' ); ?></a>
+                <a href="#wc-api-auditor-tab-blocklist" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-blocklist"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
+                <a href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints"><?php esc_html_e( 'Endpoints', 'wc-api-auditor' ); ?></a>
+            </div>
+
+            <div id="wc-api-auditor-tab-general" class="wc-api-auditor-tab-panel is-active">
+                <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
+                <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
+                <label class="wc-api-auditor-setting">
+                    <input type="checkbox" name="capture_all" value="1" <?php checked( $settings['capture_all'], true ); ?> />
+                    <?php esc_html_e( 'Capturar todas las solicitudes REST (todas las rutas)', 'wc-api-auditor' ); ?>
+                </label>
+                <p class="description"><?php esc_html_e( 'Al activarlo se registrará cualquier endpoint REST, no solo los de WooCommerce. Puede aumentar considerablemente el tamaño del log.', 'wc-api-auditor' ); ?></p>
+                <label class="wc-api-auditor-setting">
+                    <input type="checkbox" name="capture_extended" value="1" <?php checked( $settings['capture_extended'], true ); ?> />
+                    <?php esc_html_e( 'Activar captura ampliada', 'wc-api-auditor' ); ?>
+                </label>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Namespaces adicionales (separados por coma)', 'wc-api-auditor' ); ?>
+                    <input type="text" name="extra_namespaces" value="<?php echo esc_attr( implode( ', ', $settings['extra_namespaces'] ) ); ?>" class="regular-text" />
+                </label>
+                <p class="description"><?php esc_html_e( 'Utiliza este ajuste si necesitas auditar otros endpoints (por ejemplo, /wp/v2/). Considera el impacto en el tamaño de la base de datos.', 'wc-api-auditor' ); ?></p>
+                <?php $payload_limit_kb = max( 1, intval( ceil( $settings['payload_max_length'] / 1024 ) ) ); ?>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Límite de almacenamiento para cuerpos (KB)', 'wc-api-auditor' ); ?>
+                    <input type="number" min="1" name="payload_max_length" value="<?php echo esc_attr( $payload_limit_kb ); ?>" class="small-text" />
+                </label>
+                <p class="description"><?php esc_html_e( 'Los cuerpos de petición y respuesta que superen este límite se truncarán y se marcarán como [TRUNCADO], guardando un hash del contenido completo para trazabilidad. Valor por defecto: 50 KB.', 'wc-api-auditor' ); ?></p>
+                <h2><?php esc_html_e( 'Retención y limpieza automática', 'wc-api-auditor' ); ?></h2>
+                <p><?php esc_html_e( 'Configura cuántos días conservar los registros o establece un límite máximo de filas. La limpieza se ejecuta de forma automática mediante WP-Cron (dos veces al día) usando el índice por fecha para minimizar el impacto.', 'wc-api-auditor' ); ?></p>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Días de retención (0 para desactivar)', 'wc-api-auditor' ); ?>
+                    <input type="number" min="0" name="retention_days" value="<?php echo esc_attr( $settings['retention_days'] ); ?>" class="small-text" />
+                </label>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Límite máximo de registros (0 para desactivar)', 'wc-api-auditor' ); ?>
+                    <input type="number" min="0" name="retention_max_records" value="<?php echo esc_attr( $settings['retention_max_records'] ); ?>" class="small-text" />
+                </label>
+                <?php $this->render_cleanup_status(); ?>
+                <h2><?php esc_html_e( 'Actualizaciones desde GitHub', 'wc-api-auditor' ); ?></h2>
+                <p><?php esc_html_e( 'Introduce un token personal de GitHub con permiso de lectura para consultar las versiones publicadas en el repositorio oficial. No se almacena en texto plano en ningún archivo y solo se usa para las peticiones de API.', 'wc-api-auditor' ); ?></p>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Token de GitHub (scope: repo:public_repo o read-only)', 'wc-api-auditor' ); ?>
+                    <input type="password" name="github_token" value="<?php echo esc_attr( $settings['github_token'] ); ?>" class="regular-text" autocomplete="off" />
+                </label>
+                <p class="description"><?php esc_html_e( 'Este token solo se enviará a api.github.com para obtener los metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
+            </div>
+
+            <div id="wc-api-auditor-tab-blocklist" class="wc-api-auditor-tab-panel">
+                <h2><?php esc_html_e( 'Bloqueo manual de endpoints', 'wc-api-auditor' ); ?></h2>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Endpoints bloqueados (uno por línea)', 'wc-api-auditor' ); ?>
+                    <textarea id="wc-api-auditor-blocked-endpoints" name="blocked_endpoints" rows="6" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
+                </label>
+                <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
+            </div>
+
+            <div id="wc-api-auditor-tab-endpoints" class="wc-api-auditor-tab-panel">
+                <h2><?php esc_html_e( 'Bloqueo sugerido por endpoints registrados', 'wc-api-auditor' ); ?></h2>
+                <p><?php esc_html_e( 'Selecciona rutas detectadas en el log para bloquearlas rápidamente. Se guardarán como un listado independiente y se combinarán con el campo manual.', 'wc-api-auditor' ); ?></p>
+                <label class="wc-api-auditor-setting">
+                    <?php esc_html_e( 'Endpoints detectados', 'wc-api-auditor' ); ?>
+                    <select name="blocked_endpoints_suggested[]" id="wc-api-auditor-endpoints-select" multiple size="8" class="widefat wc-api-auditor-endpoints-select" aria-describedby="wc-api-auditor-endpoints-help">
+                        <?php foreach ( $logged_endpoints as $endpoint ) : ?>
+                            <option value="<?php echo esc_attr( $endpoint ); ?>" <?php selected( in_array( $endpoint, $settings['blocked_endpoints_suggested'], true ), true ); ?>><?php echo esc_html( $endpoint ); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <p id="wc-api-auditor-endpoints-help" class="description"><?php esc_html_e( 'Pulsa Ctrl/Cmd para seleccionar varias rutas. Si necesitas copiarlas al listado manual, usa el botón siguiente para añadirlas sin duplicados.', 'wc-api-auditor' ); ?></p>
+                <button type="button" class="button" id="wc-api-auditor-copy-endpoints"><?php esc_html_e( 'Copiar selección al campo manual', 'wc-api-auditor' ); ?></button>
+            </div>
+
+            <p class="submit">
+                <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
+            </p>
         </form>
+        <script type="text/javascript">
+            (function() {
+                var triggers = document.querySelectorAll('.wc-api-auditor-tab-trigger');
+                var panels = document.querySelectorAll('.wc-api-auditor-tab-panel');
+
+                function activateTab(targetId) {
+                    triggers.forEach(function(trigger) {
+                        trigger.classList.toggle('nav-tab-active', trigger.getAttribute('data-target') === targetId);
+                        trigger.setAttribute('aria-selected', trigger.getAttribute('data-target') === targetId ? 'true' : 'false');
+                    });
+
+                    panels.forEach(function(panel) {
+                        panel.classList.toggle('is-active', panel.id === targetId);
+                        panel.setAttribute('aria-hidden', panel.id === targetId ? 'false' : 'true');
+                    });
+                }
+
+                triggers.forEach(function(trigger) {
+                    trigger.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        activateTab(trigger.getAttribute('data-target'));
+                    });
+                });
+
+                var copyButton = document.getElementById('wc-api-auditor-copy-endpoints');
+                var select = document.getElementById('wc-api-auditor-endpoints-select');
+                var textarea = document.getElementById('wc-api-auditor-blocked-endpoints');
+
+                if (copyButton && select && textarea) {
+                    copyButton.addEventListener('click', function() {
+                        var selected = Array.prototype.filter.call(select.options, function(option) {
+                            return option.selected && option.value;
+                        }).map(function(option) {
+                            return option.value;
+                        });
+
+                        if (!selected.length) {
+                            return;
+                        }
+
+                        var existing = textarea.value.split(/\r?\n/).filter(function(line) {
+                            return line.trim() !== '';
+                        });
+
+                        var merged = Array.from(new Set(existing.concat(selected)));
+                        textarea.value = merged.join('\n');
+                        textarea.focus();
+                    });
+                }
+            })();
+        </script>
         <?php
     }
 
@@ -541,7 +691,7 @@ class WC_API_Auditor_Admin {
      * @param array $settings Current settings.
      */
     private function render_blocked_notice( $settings ) {
-        if ( empty( $settings['blocked_endpoints'] ) ) {
+        if ( empty( $settings['blocked_endpoints'] ) && empty( $settings['blocked_endpoints_suggested'] ) ) {
             return;
         }
 
@@ -640,6 +790,7 @@ class WC_API_Auditor_Admin {
         $namespaces_raw   = isset( $_POST['extra_namespaces'] ) ? wp_unslash( $_POST['extra_namespaces'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $payload_limit_kb = isset( $_POST['payload_max_length'] ) ? intval( $_POST['payload_max_length'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $blocked_raw      = isset( $_POST['blocked_endpoints'] ) ? wp_unslash( $_POST['blocked_endpoints'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $blocked_suggested = isset( $_POST['blocked_endpoints_suggested'] ) ? (array) wp_unslash( $_POST['blocked_endpoints_suggested'] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_days   = isset( $_POST['retention_days'] ) ? intval( $_POST['retention_days'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_limit  = isset( $_POST['retention_max_records'] ) ? intval( $_POST['retention_max_records'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $github_token     = isset( $_POST['github_token'] ) ? sanitize_text_field( wp_unslash( $_POST['github_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -651,6 +802,7 @@ class WC_API_Auditor_Admin {
             'extra_namespaces' => $logger->sanitize_namespaces_list( $namespaces_raw ),
             'payload_max_length' => max( 1024, $payload_limit_kb * 1024 ),
             'blocked_endpoints'  => $logger->sanitize_blocked_endpoints_list( $blocked_raw ),
+            'blocked_endpoints_suggested' => $logger->sanitize_blocked_endpoints_list( $blocked_suggested ),
             'retention_days'      => max( 0, $retention_days ),
             'retention_max_records' => max( 0, $retention_limit ),
             'github_token'       => $github_token,

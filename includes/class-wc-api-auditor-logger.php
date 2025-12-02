@@ -272,7 +272,9 @@ class WC_API_Auditor_Logger {
         $route = $request->get_route();
         $settings = $this->get_settings();
 
-        if ( $this->is_route_blocked( $route, $settings['blocked_endpoints'] ) ) {
+        $blocked_patterns = $this->get_blocked_patterns_from_settings( $settings );
+
+        if ( $this->is_route_blocked( $route, $blocked_patterns ) ) {
             return false;
         }
 
@@ -839,6 +841,7 @@ class WC_API_Auditor_Logger {
             $stored['payload_max_length'] = self::DEFAULT_STORAGE_LIMIT;
         }
         $stored['blocked_endpoints'] = $this->sanitize_blocked_endpoints_list( isset( $stored['blocked_endpoints'] ) ? $stored['blocked_endpoints'] : array() );
+        $stored['blocked_endpoints_suggested'] = $this->sanitize_blocked_endpoints_list( isset( $stored['blocked_endpoints_suggested'] ) ? $stored['blocked_endpoints_suggested'] : array() );
         $stored['retention_days']         = isset( $stored['retention_days'] ) ? max( 0, absint( $stored['retention_days'] ) ) : 0;
         $stored['retention_max_records']  = isset( $stored['retention_max_records'] ) ? max( 0, absint( $stored['retention_max_records'] ) ) : 0;
         $stored['github_token']       = isset( $stored['github_token'] ) ? sanitize_text_field( $stored['github_token'] ) : '';
@@ -868,6 +871,7 @@ class WC_API_Auditor_Logger {
             'extra_namespaces'  => array(),
             'payload_max_length' => self::DEFAULT_STORAGE_LIMIT,
             'blocked_endpoints'  => array(),
+            'blocked_endpoints_suggested' => array(),
             'retention_days'         => 0,
             'retention_max_records'  => 0,
             'github_token'       => '',
@@ -934,6 +938,25 @@ class WC_API_Auditor_Logger {
         }
 
         return array_values( array_unique( $clean ) );
+    }
+
+    /**
+     * Combine blocked endpoint sources into a single sanitized list.
+     *
+     * @param array $settings Current settings.
+     *
+     * @return array
+     */
+    private function get_blocked_patterns_from_settings( $settings ) {
+        $patterns = array();
+
+        foreach ( array( 'blocked_endpoints', 'blocked_endpoints_suggested' ) as $key ) {
+            if ( isset( $settings[ $key ] ) && is_array( $settings[ $key ] ) ) {
+                $patterns = array_merge( $patterns, $settings[ $key ] );
+            }
+        }
+
+        return $this->sanitize_blocked_endpoints_list( $patterns );
     }
 
     /**
@@ -1073,7 +1096,9 @@ class WC_API_Auditor_Logger {
     public function filter_rest_endpoints( $endpoints ) {
         $settings = $this->get_settings();
 
-        if ( empty( $settings['blocked_endpoints'] ) || ! is_array( $settings['blocked_endpoints'] ) ) {
+        $blocked_patterns = $this->get_blocked_patterns_from_settings( $settings );
+
+        if ( empty( $blocked_patterns ) ) {
             $this->last_blocked_routes = array();
             return $endpoints;
         }
@@ -1081,7 +1106,7 @@ class WC_API_Auditor_Logger {
         $blocked_routes = array();
 
         foreach ( $endpoints as $route => $handlers ) {
-            if ( $this->is_route_blocked( $route, $settings['blocked_endpoints'] ) ) {
+            if ( $this->is_route_blocked( $route, $blocked_patterns ) ) {
                 unset( $endpoints[ $route ] );
                 $blocked_routes[] = $route;
             }
