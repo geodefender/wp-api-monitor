@@ -25,6 +25,7 @@ define( 'WC_API_AUDITOR_TABLE', 'wp_wc_api_audit_log' );
 require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-installer.php';
 require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-logger.php';
 require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-admin.php';
+require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-updater.php';
 
 register_activation_hook( __FILE__, array( 'WC_API_Auditor_Installer', 'install' ) );
 
@@ -38,6 +39,7 @@ function wc_api_auditor_init() {
 
     if ( is_admin() ) {
         WC_API_Auditor_Admin::get_instance()->init();
+        WC_API_Auditor_Updater::get_instance()->init();
     }
 }
 add_action( 'plugins_loaded', 'wc_api_auditor_init' );
