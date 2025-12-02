@@ -844,7 +844,7 @@ class WC_API_Auditor_Logger {
         $stored['blocked_endpoints_suggested'] = $this->sanitize_blocked_endpoints_list( isset( $stored['blocked_endpoints_suggested'] ) ? $stored['blocked_endpoints_suggested'] : array() );
         $stored['retention_days']         = isset( $stored['retention_days'] ) ? max( 0, absint( $stored['retention_days'] ) ) : 0;
         $stored['retention_max_records']  = isset( $stored['retention_max_records'] ) ? max( 0, absint( $stored['retention_max_records'] ) ) : 0;
-        $stored['github_token']       = isset( $stored['github_token'] ) ? sanitize_text_field( $stored['github_token'] ) : '';
+        $stored['github_token']       = defined( 'WC_API_AUDITOR_GITHUB_TOKEN' ) ? WC_API_AUDITOR_GITHUB_TOKEN : '';
 
         $this->settings = wp_parse_args( $stored, $defaults );
 
@@ -874,7 +874,7 @@ class WC_API_Auditor_Logger {
             'blocked_endpoints_suggested' => array(),
             'retention_days'         => 0,
             'retention_max_records'  => 0,
-            'github_token'       => '',
+            'github_token'       => defined( 'WC_API_AUDITOR_GITHUB_TOKEN' ) ? WC_API_AUDITOR_GITHUB_TOKEN : '',
         );
     }
 
