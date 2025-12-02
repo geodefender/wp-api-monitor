@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin UI for WooCommerce API Auditor.
+ * Admin UI for WP API Monitor.
  *
  * @package WC_API_Auditor
  */
@@ -48,8 +48,8 @@ class WC_API_Auditor_Admin {
     public function register_menu() {
         add_submenu_page(
             'woocommerce',
-            esc_html__( 'API Auditor', 'wc-api-auditor' ),
-            esc_html__( 'API Auditor', 'wc-api-auditor' ),
+            esc_html__( 'API Monitor', 'wc-api-auditor' ),
+            esc_html__( 'API Monitor', 'wc-api-auditor' ),
             'manage_woocommerce',
             'wc-api-auditor',
             array( $this, 'render_page' )
@@ -78,7 +78,7 @@ class WC_API_Auditor_Admin {
 
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html__( 'WooCommerce API Auditor', 'wc-api-auditor' ); ?></h1>
+            <h1><?php echo esc_html__( 'WP API Monitor', 'wc-api-auditor' ); ?></h1>
             <?php settings_errors( 'wc_api_auditor_settings' ); ?>
             <?php $this->render_blocked_notice( $settings ); ?>
             <?php $this->render_settings_form( $settings ); ?>

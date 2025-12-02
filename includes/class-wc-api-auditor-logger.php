@@ -1,6 +1,6 @@
 <?php
 /**
- * Logger for WooCommerce API Auditor.
+ * Logger for WP API Monitor.
  *
  * @package WC_API_Auditor
  */

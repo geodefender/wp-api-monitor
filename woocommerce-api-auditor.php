@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: WooCommerce API Auditor
- * Description: Registra y muestra todas las solicitudes realizadas a la API REST de WooCommerce.
+ * Plugin Name: WP API Monitor
+ * Description: Monitors and logs every WordPress and WooCommerce REST API request with exportable reports and retention controls.
  * Version: 1.0.0
  * Author: inmensus.ai
  * Text Domain: wc-api-auditor
