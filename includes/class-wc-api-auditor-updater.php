@@ -195,6 +195,140 @@ class WC_API_Auditor_Updater {
     }
 
     /**
+     * Download and install the latest GitHub release immediately.
+     *
+     * @return array{version?:string}|WP_Error
+     */
+    public function install_latest_release() {
+        delete_transient( self::RELEASE_TRANSIENT );
+
+        $release      = $this->get_latest_release();
+        $download_url = isset( $release['download_url'] ) ? esc_url_raw( $release['download_url'] ) : '';
+
+        if ( '' === $download_url ) {
+            return new WP_Error( 'wc_api_auditor_no_package', __( 'No se pudo localizar el paquete de descarga en GitHub.', 'wc-api-auditor' ) );
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+        $tmp_file = download_url( $download_url, 120 );
+
+        if ( is_wp_error( $tmp_file ) ) {
+            return new WP_Error( 'wc_api_auditor_download_failed', __( 'No se pudo descargar la última release desde GitHub.', 'wc-api-auditor' ), $tmp_file );
+        }
+
+        $working_dir = trailingslashit( dirname( $tmp_file ) ) . 'wc-api-auditor-' . wp_generate_password( 8, false );
+
+        if ( ! wp_mkdir_p( $working_dir ) ) {
+            @unlink( $tmp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+            return new WP_Error( 'wc_api_auditor_tmp_dir', __( 'No se pudo crear el directorio temporal para la actualización.', 'wc-api-auditor' ) );
+        }
+
+        $unzipped = unzip_file( $tmp_file, $working_dir );
+
+        if ( is_wp_error( $unzipped ) ) {
+            $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+            return new WP_Error( 'wc_api_auditor_unzip_failed', __( 'No se pudo descomprimir el paquete descargado.', 'wc-api-auditor' ), $unzipped );
+        }
+
+        $source_dirs = glob( trailingslashit( $working_dir ) . '*' );
+        $source      = '';
+
+        if ( ! empty( $source_dirs ) ) {
+            foreach ( $source_dirs as $dir ) {
+                if ( is_dir( $dir ) ) {
+                    $source = $dir;
+                    break;
+                }
+            }
+        }
+
+        if ( '' === $source ) {
+            $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+            return new WP_Error( 'wc_api_auditor_source_missing', __( 'No se encontró el contenido del plugin en el paquete.', 'wc-api-auditor' ) );
+        }
+
+        global $wp_filesystem;
+
+        if ( ! $wp_filesystem ) {
+            WP_Filesystem();
+        }
+
+        if ( ! $wp_filesystem ) {
+            $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+            return new WP_Error( 'wc_api_auditor_filesystem', __( 'No se pudo inicializar el sistema de archivos de WordPress.', 'wc-api-auditor' ) );
+        }
+
+        $plugin_file = $this->get_plugin_basename();
+        $was_active  = is_plugin_active( $plugin_file );
+
+        if ( $was_active ) {
+            deactivate_plugins( $plugin_file, true );
+        }
+
+        $destination = untrailingslashit( WC_API_AUDITOR_PATH );
+        $copied      = copy_dir( $source, $destination );
+
+        if ( is_wp_error( $copied ) ) {
+            if ( $was_active ) {
+                activate_plugin( $plugin_file );
+            }
+
+            $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+
+            return new WP_Error( 'wc_api_auditor_copy_failed', __( 'No se pudieron copiar los archivos de la actualización.', 'wc-api-auditor' ), $copied );
+        }
+
+        if ( $was_active ) {
+            $activation_result = activate_plugin( $plugin_file );
+
+            if ( is_wp_error( $activation_result ) ) {
+                $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+                return new WP_Error( 'wc_api_auditor_activation_failed', __( 'Los archivos se copiaron, pero no fue posible reactivar el plugin.', 'wc-api-auditor' ), $activation_result );
+            }
+        }
+
+        $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+
+        return array(
+            'version' => isset( $release['version'] ) ? ltrim( sanitize_text_field( $release['version'] ), 'v' ) : '',
+        );
+    }
+
+    /**
+     * Remove temporary files created during the manual update.
+     *
+     * @param string $tmp_file    Temporary zip file path.
+     * @param string $working_dir Temporary directory path.
+     */
+    private function cleanup_update_artifacts( $tmp_file, $working_dir ) {
+        global $wp_filesystem;
+
+        if ( $wp_filesystem ) {
+            $wp_filesystem->delete( $working_dir, true );
+            $wp_filesystem->delete( $tmp_file );
+            return;
+        }
+
+        if ( file_exists( $tmp_file ) ) {
+            @unlink( $tmp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        }
+
+        if ( file_exists( $working_dir ) ) {
+            foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $working_dir, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST ) as $path ) {
+                if ( $path->isDir() ) {
+                    @rmdir( $path->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+                } else {
+                    @unlink( $path->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+                }
+            }
+
+            @rmdir( $working_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        }
+    }
+
+    /**
      * Retrieve stored GitHub token.
      *
      * @return string
