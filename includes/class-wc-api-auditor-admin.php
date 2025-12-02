@@ -572,7 +572,6 @@ class WC_API_Auditor_Admin {
             <div class="nav-tab-wrapper wc-api-auditor-tabs" role="tablist">
                 <a id="wc-api-auditor-tab-general-tab" href="#wc-api-auditor-tab-general" class="nav-tab nav-tab-active wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-general" role="tab" aria-controls="wc-api-auditor-tab-general" aria-selected="true"><?php esc_html_e( 'General', 'wc-api-auditor' ); ?></a>
                 <a id="wc-api-auditor-tab-blocklist-tab" href="#wc-api-auditor-tab-blocklist" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-blocklist" role="tab" aria-controls="wc-api-auditor-tab-blocklist" aria-selected="false"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
-                <a id="wc-api-auditor-tab-endpoints-tab" href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints" role="tab" aria-controls="wc-api-auditor-tab-endpoints" aria-selected="false"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
                 <a id="wc-api-auditor-tab-updates-tab" href="#wc-api-auditor-tab-updates" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-updates" role="tab" aria-controls="wc-api-auditor-tab-updates" aria-selected="false"><?php esc_html_e( 'Updates', 'wc-api-auditor' ); ?></a>
             </div>
 
@@ -619,9 +618,6 @@ class WC_API_Auditor_Admin {
                     <textarea id="wc-api-auditor-blocked-endpoints" name="blocked_endpoints" rows="6" class="large-text code"><?php echo esc_textarea( implode( "\n", $settings['blocked_endpoints'] ) ); ?></textarea>
                 </label>
                 <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
-            </div>
-
-            <div id="wc-api-auditor-tab-endpoints" class="wc-api-auditor-tab-panel" role="tabpanel" aria-labelledby="wc-api-auditor-tab-endpoints-tab">
                 <h2><?php esc_html_e( 'Bloqueo sugerido por endpoints registrados', 'wc-api-auditor' ); ?></h2>
                 <p><?php esc_html_e( 'Selecciona rutas detectadas en el log para bloquearlas rápidamente. Se guardarán como un listado independiente y se combinarán con el campo manual.', 'wc-api-auditor' ); ?></p>
                 <label class="wc-api-auditor-setting">
