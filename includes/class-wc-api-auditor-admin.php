@@ -557,7 +557,7 @@ class WC_API_Auditor_Admin {
             <div class="nav-tab-wrapper wc-api-auditor-tabs">
                 <a href="#wc-api-auditor-tab-general" class="nav-tab nav-tab-active wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-general"><?php esc_html_e( 'General', 'wc-api-auditor' ); ?></a>
                 <a href="#wc-api-auditor-tab-blocklist" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-blocklist"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
-                <a href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints"><?php esc_html_e( 'Endpoints', 'wc-api-auditor' ); ?></a>
+                <a href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
             </div>
 
             <div id="wc-api-auditor-tab-general" class="wc-api-auditor-tab-panel is-active">
