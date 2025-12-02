@@ -610,13 +610,6 @@ class WC_API_Auditor_Admin {
                     <input type="number" min="0" name="retention_max_records" value="<?php echo esc_attr( $settings['retention_max_records'] ); ?>" class="small-text" />
                 </label>
                 <?php $this->render_cleanup_status(); ?>
-                <h2><?php esc_html_e( 'Actualizaciones desde GitHub', 'wc-api-auditor' ); ?></h2>
-                <p><?php esc_html_e( 'El token personal de GitHub necesario para comprobar nuevas versiones está preconfigurado y no se puede modificar desde esta pantalla.', 'wc-api-auditor' ); ?></p>
-                <label class="wc-api-auditor-setting">
-                    <?php esc_html_e( 'Token de GitHub (preconfigurado)', 'wc-api-auditor' ); ?>
-                    <input type="password" value="********" class="regular-text" autocomplete="off" disabled aria-disabled="true" />
-                </label>
-                <p class="description"><?php esc_html_e( 'El token se utiliza únicamente para las peticiones a api.github.com con el fin de recuperar metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
             </div>
 
             <div id="wc-api-auditor-tab-blocklist" class="wc-api-auditor-tab-panel" role="tabpanel" aria-labelledby="wc-api-auditor-tab-blocklist-tab">
