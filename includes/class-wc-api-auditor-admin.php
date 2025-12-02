@@ -523,6 +523,13 @@ class WC_API_Auditor_Admin {
                 <input type="number" min="0" name="retention_max_records" value="<?php echo esc_attr( $settings['retention_max_records'] ); ?>" class="small-text" />
             </label>
             <?php $this->render_cleanup_status(); ?>
+            <h2><?php esc_html_e( 'Actualizaciones desde GitHub', 'wc-api-auditor' ); ?></h2>
+            <p><?php esc_html_e( 'Introduce un token personal de GitHub con permiso de lectura para consultar las versiones publicadas en el repositorio oficial. No se almacena en texto plano en ningún archivo y solo se usa para las peticiones de API.', 'wc-api-auditor' ); ?></p>
+            <label style="display: block; margin-bottom: 10px;">
+                <?php esc_html_e( 'Token de GitHub (scope: repo:public_repo o read-only)', 'wc-api-auditor' ); ?>
+                <input type="password" name="github_token" value="<?php echo esc_attr( $settings['github_token'] ); ?>" class="regular-text" autocomplete="off" />
+            </label>
+            <p class="description"><?php esc_html_e( 'Este token solo se enviará a api.github.com para obtener los metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
             <button class="button button-primary" type="submit"><?php esc_html_e( 'Guardar ajustes', 'wc-api-auditor' ); ?></button>
         </form>
         <?php
@@ -635,6 +642,7 @@ class WC_API_Auditor_Admin {
         $blocked_raw      = isset( $_POST['blocked_endpoints'] ) ? wp_unslash( $_POST['blocked_endpoints'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_days   = isset( $_POST['retention_days'] ) ? intval( $_POST['retention_days'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_limit  = isset( $_POST['retention_max_records'] ) ? intval( $_POST['retention_max_records'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $github_token     = isset( $_POST['github_token'] ) ? sanitize_text_field( wp_unslash( $_POST['github_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
@@ -645,10 +653,15 @@ class WC_API_Auditor_Admin {
             'blocked_endpoints'  => $logger->sanitize_blocked_endpoints_list( $blocked_raw ),
             'retention_days'      => max( 0, $retention_days ),
             'retention_max_records' => max( 0, $retention_limit ),
+            'github_token'       => $github_token,
         );
 
         update_option( 'wc_api_auditor_settings', $settings );
         $logger->refresh_settings();
+
+        if ( class_exists( 'WC_API_Auditor_Updater' ) ) {
+            delete_transient( WC_API_Auditor_Updater::RELEASE_TRANSIENT );
+        }
 
         add_settings_error( 'wc_api_auditor_settings', 'wc_api_auditor_settings_saved', esc_html__( 'Ajustes guardados correctamente.', 'wc-api-auditor' ), 'updated' );
     }

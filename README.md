@@ -13,3 +13,11 @@ WP API Monitor logs and visualizes every REST API request that reaches your Word
 
 ## How it helps
 WP API Monitor provides a transparent audit trail for API traffic, making it easier to troubleshoot failed calls, verify partner usage, and detect anomalous access patterns before they become incidents.
+
+## Enabling GitHub-powered updates
+WP API Monitor can pull new releases directly from the public repository at `geodefender/wp-api-monitor` on GitHub. To enable this:
+
+1. Create a GitHub personal access token with read-only scope (for public repos `public_repo` is enough).
+2. In WordPress, go to **WP API Monitor** → **Ajustes** and paste the token in the **Actualizaciones desde GitHub** section.
+3. Save the settings. The token is stored in WordPress options (not in files) and used only for authenticated requests to `api.github.com`.
+4. Check **Dashboard → Updates** to trigger WordPress to fetch the latest release metadata and install updates like any other plugin.
