@@ -3,7 +3,7 @@
 Plugin Name: WP API Monitor
 Plugin URI: https://wordpress.org/plugins/wp-api-monitor/
 Description: Monitor, search and debug all REST API requests and responses in WordPress in real time.
-Version: 1.0.1
+Version: 1.0.2
 Author: Enrique Orione
 Author URI: https://github.com/geodefender
 License: GPLv2 or later
