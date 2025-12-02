@@ -268,11 +268,46 @@ class WC_API_Auditor_Updater {
         }
 
         $destination = untrailingslashit( WC_API_AUDITOR_PATH );
-        $copied      = copy_dir( $source, $destination );
+
+        $backup_dir = trailingslashit( dirname( $destination ) ) . basename( $destination ) . '-backup-' . wp_generate_password( 6, false );
+
+        $backed_up = false;
+
+        if ( $wp_filesystem->exists( $destination ) ) {
+            $backed_up = $wp_filesystem->move( $destination, $backup_dir, true );
+
+            if ( ! $backed_up && ! $wp_filesystem->delete( $destination, true ) ) {
+                $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+
+                return new WP_Error(
+                    'wc_api_auditor_cleanup_failed',
+                    __( 'No se pudo preparar el directorio del plugin antes de copiar la actualización.', 'wc-api-auditor' )
+                );
+            }
+        }
+
+        if ( ! $wp_filesystem->exists( $destination ) && ! $wp_filesystem->mkdir( $destination, FS_CHMOD_DIR ) ) {
+            if ( $backed_up ) {
+                $wp_filesystem->move( $backup_dir, $destination, true );
+            }
+
+            $this->cleanup_update_artifacts( $tmp_file, $working_dir );
+
+            return new WP_Error(
+                'wc_api_auditor_destination_missing',
+                __( 'No se pudo recrear el directorio del plugin antes de copiar la actualización.', 'wc-api-auditor' )
+            );
+        }
+
+        $copied = copy_dir( $source, $destination );
 
         if ( is_wp_error( $copied ) ) {
             if ( $was_active ) {
                 activate_plugin( $plugin_file );
+            }
+
+            if ( $backed_up && $wp_filesystem->exists( $backup_dir ) ) {
+                $wp_filesystem->move( $backup_dir, $destination, true );
             }
 
             $this->cleanup_update_artifacts( $tmp_file, $working_dir );
@@ -284,9 +319,18 @@ class WC_API_Auditor_Updater {
             $activation_result = activate_plugin( $plugin_file );
 
             if ( is_wp_error( $activation_result ) ) {
+                if ( $backed_up && $wp_filesystem->exists( $backup_dir ) ) {
+                    $wp_filesystem->delete( $destination, true );
+                    $wp_filesystem->move( $backup_dir, $destination, true );
+                }
+
                 $this->cleanup_update_artifacts( $tmp_file, $working_dir );
                 return new WP_Error( 'wc_api_auditor_activation_failed', __( 'Los archivos se copiaron, pero no fue posible reactivar el plugin.', 'wc-api-auditor' ), $activation_result );
             }
+        }
+
+        if ( $backed_up && $wp_filesystem->exists( $backup_dir ) ) {
+            $wp_filesystem->delete( $backup_dir, true );
         }
 
         $this->cleanup_update_artifacts( $tmp_file, $working_dir );
