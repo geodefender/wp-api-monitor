@@ -43,16 +43,16 @@ class WC_API_Auditor_Admin {
     }
 
     /**
-     * Add submenu under WooCommerce.
+     * Register top-level admin menu.
      */
     public function register_menu() {
-        add_submenu_page(
-            'woocommerce',
-            esc_html__( 'API Monitor', 'wc-api-auditor' ),
-            esc_html__( 'API Monitor', 'wc-api-auditor' ),
+        add_menu_page(
+            esc_html__( 'WP API Monitor', 'wc-api-auditor' ),
+            esc_html__( 'WP API Monitor', 'wc-api-auditor' ),
             'manage_woocommerce',
             'wc-api-auditor',
-            array( $this, 'render_page' )
+            array( $this, 'render_page' ),
+            'dashicons-admin-site'
         );
     }
 

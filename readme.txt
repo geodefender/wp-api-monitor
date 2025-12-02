@@ -59,7 +59,7 @@ Built for developers, agencies and DevOps teams.
 
 1. Upload the plugin folder `wp-api-monitor` to `/wp-content/plugins/`.
 2. Activate it through the “Plugins” menu in WordPress.
-3. Go to **Tools → API Monitor** to view logs.
+3. Open the **WP API Monitor** admin menu to view logs.
 
 == Screenshots ==
 
