@@ -1,12 +1,15 @@
 <?php
-/**
- * Plugin Name: WP API Monitor
- * Description: Monitors and logs every WordPress and WooCommerce REST API request with exportable reports and retention controls.
- * Version: 1.0.0
- * Author: inmensus.ai
- * Text Domain: wc-api-auditor
- * Domain Path: /languages
- */
+/*
+Plugin Name: WP API Monitor
+Plugin URI: https://wordpress.org/plugins/wp-api-monitor/
+Description: Monitor, search and debug all REST API requests and responses in WordPress in real time.
+Version: 1.0.0
+Author: Enrique Orione
+Author URI: https://github.com/geodefender
+License: GPLv2 or later
+Text Domain: wp-api-monitor
+Domain Path: /languages
+*/
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
