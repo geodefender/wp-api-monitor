@@ -82,6 +82,20 @@ class WC_API_Auditor_Admin {
     public function init() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         add_action( 'admin_post_wc_api_auditor_export', array( $this, 'handle_export' ) );
+        add_action( 'admin_notices', array( $this, 'render_update_notices' ) );
+    }
+
+    /**
+     * Render notices for manual update operations.
+     */
+    public function render_update_notices() {
+        $page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        if ( 'wc-api-auditor' !== $page ) {
+            return;
+        }
+
+        settings_errors( 'wc_api_auditor_updates' );
     }
 
     /**
@@ -108,6 +122,7 @@ class WC_API_Auditor_Admin {
 
         $this->handle_export();
         $this->handle_delete_actions();
+        $this->handle_manual_update();
         $this->handle_settings_form();
 
         $settings = $this->get_settings();
@@ -554,13 +569,14 @@ class WC_API_Auditor_Admin {
         ?>
         <form method="post" class="wc-api-auditor-settings" action="<?php echo esc_url( admin_url( 'admin.php?page=wc-api-auditor' ) ); ?>">
             <?php wp_nonce_field( 'wc_api_auditor_settings_action', 'wc_api_auditor_settings_nonce' ); ?>
-            <div class="nav-tab-wrapper wc-api-auditor-tabs">
-                <a href="#wc-api-auditor-tab-general" class="nav-tab nav-tab-active wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-general"><?php esc_html_e( 'General', 'wc-api-auditor' ); ?></a>
-                <a href="#wc-api-auditor-tab-blocklist" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-blocklist"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
-                <a href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
+            <div class="nav-tab-wrapper wc-api-auditor-tabs" role="tablist">
+                <a id="wc-api-auditor-tab-general-tab" href="#wc-api-auditor-tab-general" class="nav-tab nav-tab-active wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-general" role="tab" aria-controls="wc-api-auditor-tab-general" aria-selected="true"><?php esc_html_e( 'General', 'wc-api-auditor' ); ?></a>
+                <a id="wc-api-auditor-tab-blocklist-tab" href="#wc-api-auditor-tab-blocklist" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-blocklist" role="tab" aria-controls="wc-api-auditor-tab-blocklist" aria-selected="false"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
+                <a id="wc-api-auditor-tab-endpoints-tab" href="#wc-api-auditor-tab-endpoints" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-endpoints" role="tab" aria-controls="wc-api-auditor-tab-endpoints" aria-selected="false"><?php esc_html_e( 'Block endpoints', 'wc-api-auditor' ); ?></a>
+                <a id="wc-api-auditor-tab-updates-tab" href="#wc-api-auditor-tab-updates" class="nav-tab wc-api-auditor-tab-trigger" data-target="wc-api-auditor-tab-updates" role="tab" aria-controls="wc-api-auditor-tab-updates" aria-selected="false"><?php esc_html_e( 'Updates', 'wc-api-auditor' ); ?></a>
             </div>
 
-            <div id="wc-api-auditor-tab-general" class="wc-api-auditor-tab-panel is-active">
+            <div id="wc-api-auditor-tab-general" class="wc-api-auditor-tab-panel is-active" role="tabpanel" aria-labelledby="wc-api-auditor-tab-general-tab">
                 <h2><?php esc_html_e( 'Ajustes de captura', 'wc-api-auditor' ); ?></h2>
                 <p><?php esc_html_e( 'Activa la captura ampliada para registrar errores previos al callback y rutas adicionales. Esto puede generar un mayor volumen de datos.', 'wc-api-auditor' ); ?></p>
                 <label class="wc-api-auditor-setting">
@@ -603,7 +619,7 @@ class WC_API_Auditor_Admin {
                 <p class="description"><?php esc_html_e( 'El token se utiliza únicamente para las peticiones a api.github.com con el fin de recuperar metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
             </div>
 
-            <div id="wc-api-auditor-tab-blocklist" class="wc-api-auditor-tab-panel">
+            <div id="wc-api-auditor-tab-blocklist" class="wc-api-auditor-tab-panel" role="tabpanel" aria-labelledby="wc-api-auditor-tab-blocklist-tab">
                 <h2><?php esc_html_e( 'Bloqueo manual de endpoints', 'wc-api-auditor' ); ?></h2>
                 <label class="wc-api-auditor-setting">
                     <?php esc_html_e( 'Endpoints bloqueados (uno por línea)', 'wc-api-auditor' ); ?>
@@ -612,7 +628,7 @@ class WC_API_Auditor_Admin {
                 <p class="description"><?php esc_html_e( 'Cada entrada se compara de forma exacta (sin distinguir mayúsculas/minúsculas) contra la ruta registrada y como expresión regular con coincidencia completa. Se permiten comodines con * (por ejemplo /wp/v2/users/*) para bloquear rutas hijas. Ejemplos: /wp/v2/users, /wp/v2/users/* o /wp/v2/users(/(?P<id>[\\d]+))?.', 'wc-api-auditor' ); ?></p>
             </div>
 
-            <div id="wc-api-auditor-tab-endpoints" class="wc-api-auditor-tab-panel">
+            <div id="wc-api-auditor-tab-endpoints" class="wc-api-auditor-tab-panel" role="tabpanel" aria-labelledby="wc-api-auditor-tab-endpoints-tab">
                 <h2><?php esc_html_e( 'Bloqueo sugerido por endpoints registrados', 'wc-api-auditor' ); ?></h2>
                 <p><?php esc_html_e( 'Selecciona rutas detectadas en el log para bloquearlas rápidamente. Se guardarán como un listado independiente y se combinarán con el campo manual.', 'wc-api-auditor' ); ?></p>
                 <label class="wc-api-auditor-setting">
@@ -625,6 +641,16 @@ class WC_API_Auditor_Admin {
                 </label>
                 <p id="wc-api-auditor-endpoints-help" class="description"><?php esc_html_e( 'Pulsa Ctrl/Cmd para seleccionar varias rutas. Si necesitas copiarlas al listado manual, usa el botón siguiente para añadirlas sin duplicados.', 'wc-api-auditor' ); ?></p>
                 <button type="button" class="button" id="wc-api-auditor-copy-endpoints"><?php esc_html_e( 'Copiar selección al campo manual', 'wc-api-auditor' ); ?></button>
+            </div>
+
+            <div id="wc-api-auditor-tab-updates" class="wc-api-auditor-tab-panel" role="tabpanel" aria-labelledby="wc-api-auditor-tab-updates-tab">
+                <h2><?php esc_html_e( 'Actualizaciones manuales', 'wc-api-auditor' ); ?></h2>
+                <p><?php esc_html_e( 'Descarga e instala al instante la última release publicada en GitHub. Durante el proceso el plugin puede desactivarse temporalmente.', 'wc-api-auditor' ); ?></p>
+                <form method="post" class="wc-api-auditor-update-form" action="<?php echo esc_url( admin_url( 'admin.php?page=wc-api-auditor' ) ); ?>">
+                    <?php wp_nonce_field( 'wc_api_auditor_update_action', 'wc_api_auditor_update_nonce' ); ?>
+                    <input type="hidden" name="wc_api_auditor_manual_update" value="1" />
+                    <button type="submit" class="button button-primary" aria-live="polite"><?php esc_html_e( 'Actualizar desde GitHub', 'wc-api-auditor' ); ?></button>
+                </form>
             </div>
 
             <p class="submit">
@@ -767,6 +793,46 @@ class WC_API_Auditor_Admin {
             'paged'    => $paged,
             'per_page' => 20,
         );
+    }
+
+    /**
+     * Handle manual update submissions from GitHub.
+     */
+    private function handle_manual_update() {
+        if ( ! isset( $_POST['wc_api_auditor_manual_update'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return;
+        }
+
+        $nonce = isset( $_POST['wc_api_auditor_update_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['wc_api_auditor_update_nonce'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+        if ( ! wp_verify_nonce( $nonce, 'wc_api_auditor_update_action' ) ) {
+            add_settings_error( 'wc_api_auditor_updates', 'wc_api_auditor_update_nonce', esc_html__( 'Nonce de actualización no válido.', 'wc-api-auditor' ), 'error' );
+            return;
+        }
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            add_settings_error( 'wc_api_auditor_updates', 'wc_api_auditor_update_cap', esc_html__( 'No tienes permisos para ejecutar actualizaciones manuales.', 'wc-api-auditor' ), 'error' );
+            return;
+        }
+
+        if ( ! class_exists( 'WC_API_Auditor_Updater' ) ) {
+            add_settings_error( 'wc_api_auditor_updates', 'wc_api_auditor_update_missing', esc_html__( 'El componente de actualización no está disponible.', 'wc-api-auditor' ), 'error' );
+            return;
+        }
+
+        $updater = WC_API_Auditor_Updater::get_instance();
+        $result  = $updater->install_latest_release();
+
+        if ( is_wp_error( $result ) ) {
+            add_settings_error( 'wc_api_auditor_updates', 'wc_api_auditor_update_failed', esc_html( $result->get_error_message() ), 'error' );
+            return;
+        }
+
+        $version = isset( $result['version'] ) ? sanitize_text_field( $result['version'] ) : '';
+
+        $message = $version ? sprintf( esc_html__( 'Actualización completada. Versión instalada: %s', 'wc-api-auditor' ), esc_html( $version ) ) : esc_html__( 'Actualización completada correctamente.', 'wc-api-auditor' );
+
+        add_settings_error( 'wc_api_auditor_updates', 'wc_api_auditor_update_success', $message, 'updated' );
     }
 
     /**
