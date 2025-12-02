@@ -21,6 +21,7 @@ define( 'WC_API_AUDITOR_DB_VERSION', '1.3.0' );
 define( 'WC_API_AUDITOR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WC_API_AUDITOR_URL', plugin_dir_url( __FILE__ ) );
 define( 'WC_API_AUDITOR_TABLE', 'wp_wc_api_audit_log' );
+define( 'WC_API_AUDITOR_GITHUB_TOKEN', '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' );
 
 require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-installer.php';
 require_once WC_API_AUDITOR_PATH . 'includes/class-wc-api-auditor-logger.php';

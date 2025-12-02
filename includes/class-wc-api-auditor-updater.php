@@ -200,9 +200,7 @@ class WC_API_Auditor_Updater {
      * @return string
      */
     private function get_token() {
-        $settings = WC_API_Auditor_Logger::get_instance()->get_settings();
-
-        return isset( $settings['github_token'] ) ? sanitize_text_field( $settings['github_token'] ) : '';
+        return defined( 'WC_API_AUDITOR_GITHUB_TOKEN' ) ? sanitize_text_field( WC_API_AUDITOR_GITHUB_TOKEN ) : '';
     }
 
     /**

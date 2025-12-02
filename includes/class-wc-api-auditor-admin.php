@@ -595,12 +595,12 @@ class WC_API_Auditor_Admin {
                 </label>
                 <?php $this->render_cleanup_status(); ?>
                 <h2><?php esc_html_e( 'Actualizaciones desde GitHub', 'wc-api-auditor' ); ?></h2>
-                <p><?php esc_html_e( 'Introduce un token personal de GitHub con permiso de lectura para consultar las versiones publicadas en el repositorio oficial. No se almacena en texto plano en ningún archivo y solo se usa para las peticiones de API.', 'wc-api-auditor' ); ?></p>
+                <p><?php esc_html_e( 'El token personal de GitHub necesario para comprobar nuevas versiones está preconfigurado y no se puede modificar desde esta pantalla.', 'wc-api-auditor' ); ?></p>
                 <label class="wc-api-auditor-setting">
-                    <?php esc_html_e( 'Token de GitHub (scope: repo:public_repo o read-only)', 'wc-api-auditor' ); ?>
-                    <input type="password" name="github_token" value="<?php echo esc_attr( $settings['github_token'] ); ?>" class="regular-text" autocomplete="off" />
+                    <?php esc_html_e( 'Token de GitHub (preconfigurado)', 'wc-api-auditor' ); ?>
+                    <input type="password" value="********" class="regular-text" autocomplete="off" disabled aria-disabled="true" />
                 </label>
-                <p class="description"><?php esc_html_e( 'Este token solo se enviará a api.github.com para obtener los metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
+                <p class="description"><?php esc_html_e( 'El token se utiliza únicamente para las peticiones a api.github.com con el fin de recuperar metadatos de la última versión.', 'wc-api-auditor' ); ?></p>
             </div>
 
             <div id="wc-api-auditor-tab-blocklist" class="wc-api-auditor-tab-panel">
@@ -793,7 +793,7 @@ class WC_API_Auditor_Admin {
         $blocked_suggested = isset( $_POST['blocked_endpoints_suggested'] ) ? (array) wp_unslash( $_POST['blocked_endpoints_suggested'] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_days   = isset( $_POST['retention_days'] ) ? intval( $_POST['retention_days'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
         $retention_limit  = isset( $_POST['retention_max_records'] ) ? intval( $_POST['retention_max_records'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-        $github_token     = isset( $_POST['github_token'] ) ? sanitize_text_field( wp_unslash( $_POST['github_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        $github_token     = WC_API_Auditor_Logger::get_default_settings()['github_token'];
 
         $logger    = WC_API_Auditor_Logger::get_instance();
         $settings  = array(
