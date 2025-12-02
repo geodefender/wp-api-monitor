@@ -105,6 +105,11 @@ class WC_API_Auditor_Logger {
             'user_agent'     => $this->get_user_agent(),
         );
 
+        $this->requests[ $request_key ] = array_merge(
+            $this->requests[ $request_key ],
+            $this->get_ip_enrichment_fields( $this->requests[ $request_key ]['ip_address'] )
+        );
+
         $this->insert_log( $this->requests[ $request_key ], 200, wp_json_encode( array( 'api' => $api ) ) );
     }
 
@@ -238,6 +243,10 @@ class WC_API_Auditor_Logger {
             array(
                 'timestamp'       => $payload['timestamp'],
                 'ip_address'      => $payload['ip_address'],
+                'ip_country'      => isset( $payload['ip_country'] ) ? $payload['ip_country'] : '',
+                'ip_city'         => isset( $payload['ip_city'] ) ? $payload['ip_city'] : '',
+                'ip_organization' => isset( $payload['ip_organization'] ) ? $payload['ip_organization'] : '',
+                'ip_lookup_message' => isset( $payload['ip_lookup_message'] ) ? $payload['ip_lookup_message'] : '',
                 'user_agent'      => $payload['user_agent'],
                 'http_method'     => $payload['http_method'],
                 'endpoint'        => $payload['endpoint'],
@@ -248,7 +257,7 @@ class WC_API_Auditor_Logger {
                 'response_code'   => absint( $response_code ),
                 'response_body'   => $response_body,
             ),
-            array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%s' )
+            array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%s' )
         );
     }
 
@@ -301,16 +310,20 @@ class WC_API_Auditor_Logger {
      * @return array
      */
     private function build_payload( $request ) {
-        return array(
+        $ip_address = $this->get_client_ip();
+
+        $payload = array(
             'timestamp'       => current_time( 'mysql' ),
             'http_method'     => $request->get_method(),
             'endpoint'        => $this->get_endpoint_path( $request ),
             'request_payload' => wp_json_encode( $this->get_request_payload( $request ) ),
             'api_key_id'      => $this->detect_api_key_id(),
             'api_key_display' => $this->detect_api_key_display(),
-            'ip_address'      => $this->get_client_ip(),
+            'ip_address'      => $ip_address,
             'user_agent'      => $this->get_user_agent( $request ),
         );
+
+        return array_merge( $payload, $this->get_ip_enrichment_fields( $ip_address ) );
     }
 
     /**
@@ -621,6 +634,122 @@ class WC_API_Auditor_Logger {
         }
 
         return '';
+    }
+
+    /**
+     * Enrich IP information using a public provider with transient caching.
+     *
+     * @param string $ip_address IP address to enrich.
+     *
+     * @return array
+     */
+    private function get_ip_enrichment_fields( $ip_address ) {
+        $defaults = array(
+            'ip_country'         => '',
+            'ip_city'            => '',
+            'ip_organization'    => '',
+            'ip_lookup_message'  => '',
+        );
+
+        $ip_address = sanitize_text_field( $ip_address );
+
+        if ( '' === $ip_address ) {
+            return $defaults;
+        }
+
+        $cache_key = 'wc_api_auditor_geo_' . md5( $ip_address );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return wp_parse_args( $cached, $defaults );
+        }
+
+        $data = $this->query_ip_provider( $ip_address );
+
+        set_transient( $cache_key, $data, DAY_IN_SECONDS );
+
+        return wp_parse_args( $data, $defaults );
+    }
+
+    /**
+     * Query ip-api.com for IP enrichment.
+     *
+     * @param string $ip_address IP address.
+     *
+     * @return array
+     */
+    private function query_ip_provider( $ip_address ) {
+        $result = array(
+            'ip_country'         => '',
+            'ip_city'            => '',
+            'ip_organization'    => '',
+            'ip_lookup_message'  => '',
+        );
+
+        $endpoint = sprintf(
+            'http://ip-api.com/json/%s?fields=status,message,country,city,org',
+            rawurlencode( $ip_address )
+        );
+
+        $response = wp_remote_get(
+            esc_url_raw( $endpoint ),
+            array(
+                'timeout' => 5,
+            )
+        );
+
+        if ( is_wp_error( $response ) ) {
+            $error_message = sanitize_text_field( $response->get_error_message() );
+            $result['ip_lookup_message'] = sprintf(
+                /* translators: %s: WP_Error message */
+                __( 'Enriquecimiento de IP falló: %s', 'wc-api-auditor' ),
+                $error_message
+            );
+
+            return $result;
+        }
+
+        $status_code = wp_remote_retrieve_response_code( $response );
+
+        if ( 200 !== $status_code ) {
+            $result['ip_lookup_message'] = sprintf(
+                /* translators: %d: HTTP status code */
+                __( 'Enriquecimiento de IP devolvió código %d.', 'wc-api-auditor' ),
+                absint( $status_code )
+            );
+
+            return $result;
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( ! is_array( $body ) ) {
+            $result['ip_lookup_message'] = __( 'Respuesta de enriquecimiento de IP no válida.', 'wc-api-auditor' );
+
+            return $result;
+        }
+
+        if ( isset( $body['status'] ) && 'success' === $body['status'] ) {
+            $result['ip_country']      = isset( $body['country'] ) ? sanitize_text_field( $body['country'] ) : '';
+            $result['ip_city']         = isset( $body['city'] ) ? sanitize_text_field( $body['city'] ) : '';
+            $result['ip_organization'] = isset( $body['org'] ) ? sanitize_text_field( $body['org'] ) : '';
+
+            return $result;
+        }
+
+        $message = isset( $body['message'] ) ? sanitize_text_field( $body['message'] ) : '';
+
+        if ( '' !== $message ) {
+            $result['ip_lookup_message'] = sprintf(
+                /* translators: %s: error message from provider */
+                __( 'Enriquecimiento de IP no disponible: %s', 'wc-api-auditor' ),
+                $message
+            );
+        } else {
+            $result['ip_lookup_message'] = __( 'No se pudo obtener información de IP.', 'wc-api-auditor' );
+        }
+
+        return $result;
     }
 
     /**

@@ -114,7 +114,47 @@ class WC_API_Auditor_Admin {
                                 <td><span class="<?php echo esc_attr( $method_class ); ?>"><?php echo esc_html( $method ); ?></span></td>
                                 <td><?php echo esc_html( $log->endpoint ); ?></td>
                                 <td><?php echo esc_html( $log->api_key_display ? $log->api_key_display : __( 'No detectada', 'wc-api-auditor' ) ); ?></td>
-                                <td><?php echo esc_html( $log->ip_address ); ?></td>
+                                <?php
+                                $ip_location_parts = array();
+                                if ( ! empty( $log->ip_city ) ) {
+                                    $ip_location_parts[] = $log->ip_city;
+                                }
+
+                                if ( ! empty( $log->ip_country ) ) {
+                                    $ip_location_parts[] = $log->ip_country;
+                                }
+
+                                $ip_location = implode( ', ', array_map( 'sanitize_text_field', $ip_location_parts ) );
+                                $ip_title_parts = array();
+
+                                if ( ! empty( $log->ip_organization ) ) {
+                                    $ip_title_parts[] = $log->ip_organization;
+                                }
+
+                                if ( ! empty( $ip_location ) ) {
+                                    $ip_title_parts[] = $ip_location;
+                                }
+
+                                $ip_title = implode( ' | ', array_map( 'esc_attr', $ip_title_parts ) );
+                                ?>
+                                <td>
+                                    <div class="wc-api-auditor-ip">
+                                        <span class="wc-api-auditor-ip__address"<?php echo '' !== $ip_title ? ' title="' . esc_attr( $ip_title ) . '"' : ''; ?>><?php echo esc_html( $log->ip_address ); ?></span>
+                                        <?php if ( ! empty( $log->ip_organization ) || ! empty( $ip_location ) ) : ?>
+                                            <div class="wc-api-auditor-ip__meta">
+                                                <?php if ( ! empty( $log->ip_organization ) ) : ?>
+                                                    <span class="wc-api-auditor-ip__org"><?php echo esc_html( $log->ip_organization ); ?></span>
+                                                <?php endif; ?>
+                                                <?php if ( ! empty( $ip_location ) ) : ?>
+                                                    <span class="wc-api-auditor-ip__location"><?php echo esc_html( $ip_location ); ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if ( ! empty( $log->ip_lookup_message ) ) : ?>
+                                            <div class="wc-api-auditor-ip__note"><?php echo esc_html( $log->ip_lookup_message ); ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
                                 <td><?php echo esc_html( $log->response_code ); ?></td>
                                 <td>
                                     <button class="button" type="button" data-log-id="<?php echo esc_attr( $log->id ); ?>" onclick="wcApiAuditorToggle('<?php echo esc_js( $log->id ); ?>')">
@@ -276,6 +316,29 @@ class WC_API_Auditor_Admin {
                 font-weight: 700;
                 padding: 2px 4px;
                 border-radius: 3px;
+            }
+
+            .wc-api-auditor-ip {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .wc-api-auditor-ip__meta {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                font-size: 12px;
+                color: #334155;
+            }
+
+            .wc-api-auditor-ip__org {
+                font-weight: 600;
+            }
+
+            .wc-api-auditor-ip__note {
+                font-size: 12px;
+                color: #b91c1c;
             }
         </style>
         <?php
@@ -793,18 +856,22 @@ class WC_API_Auditor_Admin {
         header( 'Content-Type: text/csv; charset=utf-8' );
         header( 'Content-Disposition: attachment; filename=wc-api-logs.csv' );
 
-        $output  = fopen( 'php://output', 'w' );
-        $header = (object) array(
-            'timestamp'       => 'timestamp',
-            'http_method'     => 'method',
-            'endpoint'        => 'endpoint',
-            'api_key_display' => 'api_key_display',
-            'ip_address'      => 'ip_address',
-            'response_code'   => 'response_code',
-            'request_payload' => 'request_payload',
-            'response_body'   => 'response_body',
-            'raw_body'        => 'raw_body',
-        );
+            $output  = fopen( 'php://output', 'w' );
+            $header = (object) array(
+                'timestamp'       => 'timestamp',
+                'http_method'     => 'method',
+                'endpoint'        => 'endpoint',
+                'api_key_display' => 'api_key_display',
+                'ip_address'      => 'ip_address',
+                'ip_country'      => 'ip_country',
+                'ip_city'         => 'ip_city',
+                'ip_organization' => 'ip_organization',
+                'ip_lookup_message' => 'ip_lookup_message',
+                'response_code'   => 'response_code',
+                'request_payload' => 'request_payload',
+                'response_body'   => 'response_body',
+                'raw_body'        => 'raw_body',
+            );
 
         fwrite( $output, $this->build_csv_line( $header ) );
 
@@ -813,17 +880,21 @@ class WC_API_Auditor_Admin {
             $response_body   = isset( $log->response_body ) ? $this->normalize_json_value( $log->response_body ) : '';
             $raw_body        = isset( $log->raw_body ) ? $this->normalize_json_value( $log->raw_body ) : '';
 
-            $row = (object) array(
-                'timestamp'       => isset( $log->timestamp ) ? $log->timestamp : '',
-                'http_method'     => isset( $log->http_method ) ? $log->http_method : '',
-                'endpoint'        => isset( $log->endpoint ) ? $log->endpoint : '',
-                'api_key_display' => isset( $log->api_key_display ) ? $log->api_key_display : '',
-                'ip_address'      => isset( $log->ip_address ) ? $log->ip_address : '',
-                'response_code'   => isset( $log->response_code ) ? $log->response_code : '',
-                'request_payload' => $request_payload,
-                'response_body'   => $response_body,
-                'raw_body'        => $raw_body,
-            );
+                $row = (object) array(
+                    'timestamp'       => isset( $log->timestamp ) ? $log->timestamp : '',
+                    'http_method'     => isset( $log->http_method ) ? $log->http_method : '',
+                    'endpoint'        => isset( $log->endpoint ) ? $log->endpoint : '',
+                    'api_key_display' => isset( $log->api_key_display ) ? $log->api_key_display : '',
+                    'ip_address'      => isset( $log->ip_address ) ? $log->ip_address : '',
+                    'ip_country'      => isset( $log->ip_country ) ? $log->ip_country : '',
+                    'ip_city'         => isset( $log->ip_city ) ? $log->ip_city : '',
+                    'ip_organization' => isset( $log->ip_organization ) ? $log->ip_organization : '',
+                    'ip_lookup_message' => isset( $log->ip_lookup_message ) ? $log->ip_lookup_message : '',
+                    'response_code'   => isset( $log->response_code ) ? $log->response_code : '',
+                    'request_payload' => $request_payload,
+                    'response_body'   => $response_body,
+                    'raw_body'        => $raw_body,
+                );
 
             fwrite( $output, $this->build_csv_line( $row ) );
         }
@@ -845,6 +916,10 @@ class WC_API_Auditor_Admin {
             $this->csv_escape( $row->endpoint ) . ',' .
             $this->csv_escape( $row->api_key_display ) . ',' .
             $this->csv_escape( $row->ip_address ) . ',' .
+            $this->csv_escape( $row->ip_country ) . ',' .
+            $this->csv_escape( $row->ip_city ) . ',' .
+            $this->csv_escape( $row->ip_organization ) . ',' .
+            $this->csv_escape( $row->ip_lookup_message ) . ',' .
             $this->csv_escape( $row->response_code ) . ',' .
             $this->csv_escape( $row->request_payload ) . ',' .
             $this->csv_escape( $row->response_body ) . ',' .
